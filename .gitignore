@@ -1,0 +1,8 @@
+.env
+*.tar.gz
+_research/
+node_modules/
+.DS_Store
+iris-main.log
+*.pyc
+.vscode/

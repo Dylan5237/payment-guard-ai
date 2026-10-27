@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaymentGuard AI — Live Decision Console</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #111a2c; --panel2: #0e1626; --line: #1e2a41;
+    --text: #dbe4f0; --muted: #7d8ba3; --accent: #4f8ef7;
+    --ok: #2ecc8f; --warn: #f5a623; --bad: #f4547c; --ai: #9b6cf3;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; padding: 20px; }
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: .3px; }
+  h1 .shield { color: var(--accent); }
+  .pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
+  .pill.live { color: var(--ok); border-color: var(--ok); }
+  .pill.mock { color: var(--warn); border-color: var(--warn); }
+  .pill.down { color: var(--bad); border-color: var(--bad); }
+  .pill.model { color: var(--ai); border-color: var(--ai); }
+  .spacer { flex: 1; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  button.secondary { background: var(--panel); border: 1px solid var(--line); color: var(--text); }
+  button:disabled { opacity: .5; cursor: wait; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .card .num { font-size: 26px; font-weight: 700; margin-top: 2px; }
+  .card .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .card.ok .num { color: var(--ok); } .card.warn .num { color: var(--warn); } .card.bad .num { color: var(--bad); } .card.ai .num { color: var(--ai); }
+  .cols { display: grid; grid-template-columns: 2fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { .cols { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 6px; font-size: 11px; font-weight: 700; }
+  .badge.APPROVE { background: rgba(46,204,143,.15); color: var(--ok); }
+  .badge.REVIEW { background: rgba(245,166,35,.15); color: var(--warn); }
+  .badge.BLOCK { background: rgba(244,84,124,.15); color: var(--bad); }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .chip.RULES { background: rgba(125,139,163,.15); color: var(--muted); }
+  .chip.AGENT { background: rgba(155,108,243,.15); color: var(--ai); }
+  .chip.MOCK { background: rgba(155,108,243,.1); color: #b9a0f8; }
+  .chip.FALLBACK { background: rgba(244,84,124,.12); color: var(--bad); }
+  .mono { font-family: Consolas, monospace; font-size: 12px; color: var(--muted); }
+  .risk { display: inline-block; min-width: 34px; text-align: center; border-radius: 6px; padding: 2px 6px; font-weight: 700; font-size: 12px; }
+  .risk.lo { background: rgba(46,204,143,.12); color: var(--ok); }
+  .risk.mid { background: rgba(245,166,35,.12); color: var(--warn); }
+  .risk.hi { background: rgba(244,84,124,.12); color: var(--bad); }
+  .summary { color: var(--muted); font-size: 12px; max-width: 340px; }
+  .reasons { margin-top: 3px; }
+  .reasons span { display: inline-block; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; margin: 2px 4px 0 0; font-size: 10.5px; color: var(--muted); }
+  footer { margin-top: 16px; color: var(--muted); font-size: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
+  footer a { color: var(--accent); text-decoration: none; }
+  .empty { padding: 22px 16px; color: var(--muted); text-align: center; }
+  #toast { position: fixed; bottom: 18px; right: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; display: none; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="shield">&#128737;</span> PaymentGuard <span style="color:var(--ai)">AI</span></h1>
+  <span class="pill" id="prod-pill">&bull;</span>
+  <span class="pill model" id="model-pill">…</span>
+  <div class="spacer"></div>
+  <button id="btn-one">Send payment</button>
+  <button id="btn-burst" class="secondary">Simulate burst (8)</button>
+  <button id="btn-seed" class="secondary">Reseed data</button>
+</header>
+
+<div class="cards">
+  <div class="card"><div class="lbl">Decisions</div><div class="num" id="s-total">–</div></div>
+  <div class="card ok"><div class="lbl">Approved</div><div class="num" id="s-approve">–</div></div>
+  <div class="card warn"><div class="lbl">Review</div><div class="num" id="s-review">–</div></div>
+  <div class="card bad"><div class="lbl">Blocked</div><div class="num" id="s-block">–</div></div>
+  <div class="card ai"><div class="lbl">AI decisions</div><div class="num" id="s-agent">–</div></div>
+  <div class="card"><div class="lbl">Tokens (prompt / compl.)</div><div class="num" id="s-tokens" style="font-size:18px">–</div></div>
+  <div class="card"><div class="lbl">Avg agent latency</div><div class="num" id="s-latency" style="font-size:18px">–</div></div>
+</div>
+
+<div class="cols">
+  <div class="panel">
+    <h2>Decision feed</h2>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Time</th><th>Customer / payment</th><th>Decision</th><th>Risk</th><th>Why</th></tr></thead>
+        <tbody id="feed"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="feed-empty">No decisions yet — send a payment.</div>
+  </div>
+  <div class="panel">
+    <h2>Review cases &amp; alerts</h2>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Case</th><th>Type</th><th>Priority</th></tr></thead>
+        <tbody id="cases"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="cases-empty">Queue is clear.</div>
+  </div>
+</div>
+
+<footer>
+  <span>Management Portal: <a href="/csp/sys/UtilHome.csp" target="_blank">home</a> &middot;
+  <a href="/csp/irisapp/EnsPortal.ProductionConfig.zen?PRODUCTION=PaymentGuard.Production" target="_blank">production</a> &middot;
+  <a href="/csp/irisapp/EnsPortal.MessageViewer.zen" target="_blank">message viewer</a></span>
+  <span>API: <a href="/paymentguard/api/health" target="_blank">/paymentguard/api</a></span>
+</footer>
+<div id="toast"></div>
+
+<script>
+const API = "/paymentguard/api";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 2500);
+}
+
+function riskClass(r) { return r >= 70 ? "hi" : r >= 40 ? "mid" : "lo"; }
+
+async function refreshHealth() {
+  try {
+    const h = await (await fetch(API + "/health")).json();
+    const p = $("prod-pill");
+    p.className = "pill " + (h.production_running ? (h.agent_mode === "live" ? "live" : "mock") : "down");
+    p.textContent = h.production_running ? (h.agent_mode === "live" ? "PRODUCTION RUNNING" : "PRODUCTION (MOCK AGENT)") : "PRODUCTION DOWN";
+    $("model-pill").textContent = h.agent_mode === "live" ? (h.provider + " / " + h.model) : "mock-engine (set an API key in .env for live AI)";
+  } catch (e) {
+    $("prod-pill").className = "pill down"; $("prod-pill").textContent = "UNREACHABLE";
+  }
+}
+
+async function refreshStats() {
+  try {
+    const s = await (await fetch(API + "/stats")).json();
+    $("s-total").textContent = s.decision_count ?? 0;
+    $("s-approve").textContent = s.action_APPROVE_count ?? 0;
+    $("s-review").textContent = s.action_REVIEW_count ?? 0;
+    $("s-block").textContent = s.action_BLOCK_count ?? 0;
+    $("s-agent").textContent = (s.source_AGENT_count ?? 0) + (s.source_MOCK_count ?? 0);
+    $("s-tokens").textContent = (s.prompt_tokens_total ?? 0) + " / " + (s.completion_tokens_total ?? 0);
+    $("s-latency").textContent = Math.round(s.avg_latency_ms ?? 0) + " ms";
+  } catch (e) {}
+}
+
+async function refreshFeed() {
+  try {
+    const d = await (await fetch(API + "/decisions?limit=25")).json();
+    const rows = (d.decisions || []).map(x => `
+      <tr>
+        <td class="mono">${esc((x.created_at || "").slice(5, 19))}</td>
+        <td><b>${esc(x.customer_id)}</b><br><span class="mono">$${(+x.amount).toLocaleString()} &middot; ${esc(x.geo_country || "??")} &middot; ${esc(x.merchant || "unknown merchant")}</span></td>
+        <td><span class="badge ${x.action}">${x.action}</span><br><span class="chip ${x.source}">${x.source === "AGENT" ? "AI AGENT" : x.source}</span></td>
+        <td><span class="risk ${riskClass(x.risk_score)}">${x.risk_score}</span></td>
+        <td><div class="summary">${esc(x.summary || "")}</div>
+            <div class="reasons">${(x.reasons || []).map(r => `<span>${esc(r)}</span>`).join("")}
+            ${x.source === "AGENT" || x.source === "MOCK" ? `<span style="color:var(--ai)">${x.prompt_tokens + x.completion_tokens} tok &middot; ${x.latency_ms} ms${x.model ? " &middot; " + esc(x.model) : ""}</span>` : ""}</div></td>
+      </tr>`).join("");
+    $("feed").innerHTML = rows;
+    $("feed-empty").style.display = rows ? "none" : "block";
+  } catch (e) {}
+}
+
+async function refreshCases() {
+  try {
+    const c = await (await fetch(API + "/cases?limit=12")).json();
+    const rows = (c.cases || []).map(x => `
+      <tr>
+        <td><span class="mono">${esc(x.case_id)}</span><br><span class="mono">${esc(x.txn_id)}</span></td>
+        <td><span class="badge ${x.type === "ALERT" ? "BLOCK" : "REVIEW"}">${x.type}</span></td>
+        <td>${esc(x.priority)}</td>
+      </tr>`).join("");
+    $("cases").innerHTML = rows;
+    $("cases-empty").style.display = rows ? "none" : "block";
+  } catch (e) {}
+}
+
+async function refreshAll() { refreshHealth(); refreshStats(); refreshFeed(); refreshCases(); }
+
+async function post(path, body) {
+  const r = await fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  return r.json();
+}
+
+function hook(id, fn) {
+  $(id).addEventListener("click", async () => {
+    $(id).disabled = true;
+    try { await fn(); refreshAll(); }
+    catch (e) { toast("Request failed: " + e.message); }
+    finally { $(id).disabled = false; }
+  });
+}
+
+hook("btn-one", async () => {
+  const r = await post("/payments", {
+    customer_id: "cust_ret_001", amount: 480.50, currency: "USD",
+    merchant: "GadgetWorld", merchant_category: "ELECTRONICS",
+    channel: "ECOM", geo_country: "SG", device_id: "dev_new_" + Math.floor(Math.random() * 999)
+  });
+  toast("Decision: " + r.action + " (" + r.source + ", risk " + r.risk_score + ")");
+});
+
+hook("btn-burst", async () => {
+  const r = await post("/payments/batch", { count: 8 });
+  toast("Burst submitted: " + (r.results || []).length + " payments decided");
+});
+
+hook("btn-seed", async () => { await post("/admin/reseed"); toast("Demo data reseeded"); });
+
+refreshAll();
+setInterval(refreshAll, 3000);
+</script>
+</body>
+</html>

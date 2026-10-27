@@ -1,0 +1,20 @@
+    zn "%SYS"
+
+    // Unexpire passwords and set up passwordless mode to simplify dev use.
+    // ** Comment out for Production use **
+    do ##class(Security.Users).UnExpireUserPasswords("*")
+
+    // Install ZPM package manager
+    set tURL = "https://pm.community.intersystems.com/packages/zpm/latest/installer"
+    set r = ##class(%Net.HttpRequest).%New()
+    set r.Server = "pm.community.intersystems.com"
+    set r.SSLConfiguration = "ISC.FeatureTracker.SSL.Config"
+    do r.Get("/packages/zpm/latest/installer")
+    do $system.OBJ.LoadStream(r.HttpResponse.Data,"c")
+
+    zn "IRISAPP"
+
+    // Load this module (compiles classes, creates web apps, seeds data, starts production)
+    zpm "load /home/irisowner/dev/ -v":1:1
+
+    halt

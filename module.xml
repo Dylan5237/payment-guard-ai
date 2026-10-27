@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Export generator="Cache" version="25">
+  <Document name="paymentguard.ZPM">
+    <Module>
+      <Name>paymentguard</Name>
+      <Version>0.1.0</Version>
+      <Description>PaymentGuard AI - AI Hub agent decisioning inside an IRIS interoperability production</Description>
+      <Packaging>module</Packaging>
+      <SourcesRoot>src</SourcesRoot>
+      <Resource Name="PaymentGuard.PKG"/>
+      <Resource Name="%ZSTART.MAC"/>
+      <FileCopy Name="web/" Target="${mgr}csp/paymentguard/" Overwrite="1"/>
+      <WebApplication
+        Url="/paymentguard/api"
+        DispatchClass="PaymentGuard.REST.Dispatch"
+        MatchRoles=":{$dbrole}"
+        PasswordAuthEnabled="0"
+        UnauthenticatedEnabled="1"
+        Recurse="1"
+        CookiePath="/paymentguard/api"
+        UseCookies="2"
+      />
+      <WebApplication
+        Url="/csp/paymentguard"
+        ServeFiles="1"
+        MatchRoles=":{$dbrole}"
+        PasswordAuthEnabled="0"
+        UnauthenticatedEnabled="1"
+        Recurse="1"
+        CookiePath="/csp/paymentguard"
+        UseCookies="2"
+      />
+      <Invoke Method="Run" Class="PaymentGuard.Util.Setup"/>
+    </Module>
+  </Document>
+</Export>

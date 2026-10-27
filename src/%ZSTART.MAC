@@ -1,0 +1,10 @@
+ROUTINE %ZSTART
+SYSTEM
+    ; PaymentGuard AI - auto-start the production when IRIS boots
+    New $Namespace
+    ZN "IRISAPP"
+    Try {
+        Do ##class(PaymentGuard.Util.Setup).EnsureRunning()
+    } Catch ex {
+    }
+    Quit
