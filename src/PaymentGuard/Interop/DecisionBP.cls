@@ -104,8 +104,8 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
                 Set source = $Select(aResp.MockMode: "MOCK", 1: "AGENT")
                 Set riskScore = d.risk_score
                 Set confidence = d.confidence
-                Set reasonCodes = $Get(d.reasons)
-                Set summary = $Get(d.summary)
+                Set reasonCodes = d.%Get("reasons")
+                Set summary = d.%Get("summary")
             }
             Set model = aResp.Model
             Set sessionId = aResp.SessionId
@@ -153,7 +153,7 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
     Set rec.SessionId = sessionId
     Set rec.PromptTokens = promptTokens
     Set rec.CompletionTokens = completionTokens
-    Set rec.ToolCalls = $Get(aResp.ToolCalls)
+    If $IsObject(aResp) Set rec.ToolCalls = aResp.ToolCalls
     Set rec.LatencyMs = latencyMs
     Set recSC = rec.%Save()
 

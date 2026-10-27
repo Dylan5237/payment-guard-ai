@@ -26,11 +26,11 @@ ClassMethod Evaluate(pReq As PaymentGuard.Request.Payment, pCtx As %DynamicObjec
     Set cust = pCtx.%Get("customer")
 
     // ── Hard blocks ─────────────────────────────────────────────
-    If $Get(cust.blacklisted) = 1 {
+    If $IsObject(cust), cust.%Get("blacklisted") = 1 {
         Set pRule = "BLACKLISTED_CUSTOMER", pReason = "Customer is on the platform blacklist"
         Quit "BLOCK"
     }
-    If $Get(cust.known) = 1, $Get(cust.kyc_status) = "FAILED" {
+    If $IsObject(cust), cust.%Get("known") = 1, cust.%Get("kyc_status") = "FAILED" {
         Set pRule = "KYC_FAILED", pReason = "Customer KYC verification has failed"
         Quit "BLOCK"
     }
@@ -38,27 +38,31 @@ ClassMethod Evaluate(pReq As PaymentGuard.Request.Payment, pCtx As %DynamicObjec
         Set pRule = "SANCTIONED_GEO", pReason = "Payment geo "_pReq.GeoCountry_" is sanctioned"
         Quit "BLOCK"
     }
-    If pReq.Amount > ..SegmentCap($Get(cust.segment)) {
-        Set pRule = "OVER_SEGMENT_LIMIT", pReason = "Amount "_pReq.Amount_" exceeds segment cap "_..SegmentCap($Get(cust.segment))
+    Set segCap = ..SegmentCap($Select($IsObject(cust): cust.%Get("segment"), 1: ""))
+    If pReq.Amount > segCap {
+        Set pRule = "OVER_SEGMENT_LIMIT", pReason = "Amount "_pReq.Amount_" exceeds segment cap "_segCap
         Quit "BLOCK"
     }
     Set v1h = pCtx.%Get("velocity_1h")
-    If $IsObject(v1h), $Get(v1h.count) >= 8 {
-        Set pRule = "VELOCITY_SPIKE", pReason = $Get(v1h.count)_" payment attempts in the last hour"
+    If $IsObject(v1h), v1h.%Get("count") >= 8 {
+        Set pRule = "VELOCITY_SPIKE", pReason = v1h.%Get("count")_" payment attempts in the last hour"
         Quit "BLOCK"
     }
 
     // ── Fast approve: trusted, verified, small, known device ───
-    If $Get(cust.known) = 1,
-       $Get(cust.kyc_status) = "VERIFIED",
-       $Get(cust.trust_score) >= 75,
+    Set dev = pCtx.%Get("device")
+    If $IsObject(cust),
+       cust.%Get("known") = 1,
+       cust.%Get("kyc_status") = "VERIFIED",
+       cust.%Get("trust_score") >= 75,
        pReq.Amount <= 100,
-       pReq.GeoCountry = $Get(cust.country) {
-        Set dev = pCtx.%Get("device")
-        If $IsObject(dev), $Get(dev.known) = 1, $Get(dev.customer_count) <= 1 {
-            Set pRule = "LOW_RISK_FAST_PATH", pReason = "Trusted customer, small amount, home country, known personal device"
-            Quit "APPROVE"
-        }
+       pReq.GeoCountry '= "",
+       pReq.GeoCountry = cust.%Get("country"),
+       $IsObject(dev),
+       dev.%Get("known") = 1,
+       dev.%Get("customer_count") <= 1 {
+        Set pRule = "LOW_RISK_FAST_PATH", pReason = "Trusted customer, small amount, home country, known personal device"
+        Quit "APPROVE"
     }
 
     // ── Gray zone: the AI Hub agent decides ────────────────────

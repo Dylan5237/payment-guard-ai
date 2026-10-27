@@ -1,4 +1,4 @@
-Include (%occStatus)
+Include (%occStatus, %UnitTest)
 
 /// End-to-end tests: real production, real message flow, mock agent engine
 /// (forced via ^PaymentGuardSettings("MockMode")) — runs fully offline.

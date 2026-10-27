@@ -3,7 +3,7 @@ Include (%occStatus)
 /// Risk intelligence tools exposed to the AI Hub agent. Every method becomes
 /// a callable tool automatically; the agent grounds its decisions in live
 /// IRIS SQL through them.
-Class PaymentGuard.Agent.Tools Extends %AI.Tool [ DependsOn = PaymentGuard.Data ]
+Class PaymentGuard.Agent.Tools Extends %AI.Tool
 {
 
 /// Full customer profile by customer id, including segment, KYC status,
@@ -35,7 +35,7 @@ Method GetCustomerProfile(CustomerId As %String) As %DynamicObject
 Method GetRecentTransactions(CustomerId As %String, Days As %Integer) As %DynamicArray
 {
     Set arr = []
-    Set cutoff = $ZDATETIME($ZHOROLOG - Days * 24, 3, 1)
+    Set cutoff = $ZDATETIME($ZHOROLOG - Days, 3, 1)
     Set tStmt = ##class(%SQL.Statement).%New()
     Set tSC = tStmt.%Prepare("SELECT TOP 10 Amount, Currency, Merchant, GeoCountry, Channel, TxnTime, Status FROM PaymentGuard_Data.Transaction WHERE CustomerId = ? AND TxnTime > ? ORDER BY TxnTime DESC")
     If $$$ISERR(tSC) Quit arr
@@ -59,7 +59,7 @@ Method GetRecentTransactions(CustomerId As %String, Days As %Integer) As %Dynami
 Method GetVelocity(CustomerId As %String, Hours As %Integer) As %DynamicObject
 {
     Set o = {"count": 0, "total_usd": 0, "distinct_merchants": 0}
-    Set cutoff = $ZDATETIME($ZHOROLOG - Hours, 3, 1)
+    Set cutoff = $ZDATETIME($ZHOROLOG - (Hours / 24), 3, 1)
     Set tStmt = ##class(%SQL.Statement).%New()
     Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(Amount),0) AS Total, COUNT(DISTINCT Merchant) AS Merch FROM PaymentGuard_Data.Transaction WHERE CustomerId = ? AND TxnTime > ?")
     If $$$ISERR(tSC) Quit o
@@ -99,7 +99,7 @@ Method GetMerchantProfile(Merchant As %String) As %DynamicObject
 {
     Set o = {"merchant": Merchant, "txn_count_30d": 0, "avg_amount_30d": 0, "blocked_30d": 0}
     If Merchant = "" Quit o
-    Set cutoff = $ZDATETIME($ZHOROLOG - 720, 3, 1)
+    Set cutoff = $ZDATETIME($ZHOROLOG - 30, 3, 1)
     Set tStmt = ##class(%SQL.Statement).%New()
     Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(AVG(Amount),0) AS AvgAmt, SUM(CASE WHEN Status = 'BLOCKED' THEN 1 ELSE 0 END) AS Blocked FROM PaymentGuard_Data.Transaction WHERE Merchant = ? AND TxnTime > ?")
     If $$$ISERR(tSC) Quit o

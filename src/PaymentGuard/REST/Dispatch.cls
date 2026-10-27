@@ -78,12 +78,13 @@ ClassMethod SubmitPayment(pReq As PaymentGuard.Request.Payment, Output pResp As 
 ClassMethod Health() As %Status
 {
     Set sc = ##class(EnsLib.Director).CreateBusinessService(..#BSTARGET, .tBS)
+    Set key = ##class(PaymentGuard.Util.Config).APIKey()
     Set o = {}
     Do o.%Set("app", "paymentguard")
     Do o.%Set("production_running", $$$ISOK(sc), "boolean")
     Do o.%Set("provider", ##class(PaymentGuard.Util.Config).ProviderName())
     Do o.%Set("model", ##class(PaymentGuard.Util.Config).ModelName())
-    Do o.%Set("api_key_present", ##class(PaymentGuard.Util.Config).APIKey()' = "", "boolean")
+    Do o.%Set("api_key_present", key '= "", "boolean")
     Do o.%Set("agent_mode", $Select(##class(PaymentGuard.Util.Config).MockRequested(): "mock", 1: "live"))
     Quit ..WriteJSON(o)
 }
@@ -145,8 +146,8 @@ ClassMethod BatchPayments() As %Status
 /// Recent transactions
 ClassMethod ListTransactions() As %Status
 {
-    Set limit = +$Get(%request.Data("limit", 1), 20)
-    If limit < 1 Set limit = 1
+    Set limit = +(%request.Data("limit", 1))
+    If limit < 1 Set limit = 20
     If limit > 200 Set limit = 200
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
@@ -172,8 +173,8 @@ ClassMethod ListTransactions() As %Status
 /// Recent decisions with full observability detail
 ClassMethod ListDecisions() As %Status
 {
-    Set limit = +$Get(%request.Data("limit", 1), 20)
-    If limit < 1 Set limit = 1
+    Set limit = +(%request.Data("limit", 1))
+    If limit < 1 Set limit = 20
     If limit > 200 Set limit = 200
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
@@ -190,7 +191,14 @@ ClassMethod ListDecisions() As %Status
         Do row.%Set("risk_score", tRS.%Get("RiskScore"))
         Do row.%Set("confidence", tRS.%Get("Confidence"))
         Set reasons = []
-        Try { Set reasons = ##class(%DynamicArray).%FromJSON($Get(tRS.%Get("ReasonCodes"))) } Catch ex { }
+        Set rcText = tRS.%Get("ReasonCodes")
+        If rcText '= "" {
+            Try {
+                Set reasons = ##class(%DynamicArray).%FromJSON(rcText)
+            } Catch ex {
+                Set reasons = []
+            }
+        }
         Do row.%Set("reasons", reasons)
         Do row.%Set("summary", tRS.%Get("Summary"))
         Do row.%Set("model", tRS.%Get("Model"))
@@ -208,8 +216,8 @@ ClassMethod ListDecisions() As %Status
 /// Review cases and fraud alerts
 ClassMethod ListCases() As %Status
 {
-    Set limit = +$Get(%request.Data("limit", 1), 20)
-    If limit < 1 Set limit = 1
+    Set limit = +(%request.Data("limit", 1))
+    If limit < 1 Set limit = 20
     If limit > 200 Set limit = 200
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()

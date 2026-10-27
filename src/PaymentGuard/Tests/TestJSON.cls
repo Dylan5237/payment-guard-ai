@@ -1,4 +1,4 @@
-Include (%occStatus)
+Include (%occStatus, %UnitTest)
 
 /// Unit tests for defensive LLM-output parsing and decision validation.
 Class PaymentGuard.Tests.TestJSON Extends %UnitTest.TestCase

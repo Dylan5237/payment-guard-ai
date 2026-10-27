@@ -77,7 +77,10 @@ Method Decide(pRequest As PaymentGuard.Request.AgentDecision, Output pResponse A
     }
 
     // Persist the session so any decision can be replayed/audited later
-    Try { Do session.%Save() } Catch ex { }
+    Try {
+        Do session.%Save()
+    } Catch ex {
+    }
 
     Set stats = session.GetStats()
     Set pResponse.RawContent = llmResponse.Content

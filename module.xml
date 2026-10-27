@@ -13,7 +13,7 @@
       <WebApplication
         Url="/paymentguard/api"
         DispatchClass="PaymentGuard.REST.Dispatch"
-        MatchRoles=":{$dbrole}"
+        MatchRoles=":{$globalsDbRole}"
         PasswordAuthEnabled="0"
         UnauthenticatedEnabled="1"
         Recurse="1"
@@ -23,7 +23,7 @@
       <WebApplication
         Url="/csp/paymentguard"
         ServeFiles="1"
-        MatchRoles=":{$dbrole}"
+        MatchRoles=":{$globalsDbRole}"
         PasswordAuthEnabled="0"
         UnauthenticatedEnabled="1"
         Recurse="1"
