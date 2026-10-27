@@ -12,6 +12,30 @@
     do r.Get("/packages/zpm/latest/installer")
     do $system.OBJ.LoadStream(r.HttpResponse.Data,"c")
 
+    // Gateway user for the web gateway sidecar (these builds ship without
+    // CSPSystem). Idempotent: Create fails silently when it already exists.
+    kill uprops
+    set uprops("Password")="SYS"
+    set uprops("Roles")="%All"
+    do ##class(Security.Users).Create("CSPSystem",.uprops)
+    kill uprops
+    set uprops("Password")="SYS"
+    set uprops("Enabled")=1
+    do ##class(Security.Users).Modify("CSPSystem",.uprops)
+
+    // Enable the Web Gateway service
+    do ##class(Security.Services).Get("%Service_WebGateway",.sprop)
+    set sprop("Enabled")=1
+    set sprop("AutheEnabled")=48
+    do ##class(Security.Services).Modify("%Service_WebGateway",.sprop)
+
+    // Unauthenticated demo access to the web apps (see README) - grant %All
+    // to UnknownUser so CSP requests can execute namespace code
+    do ##class(Security.Users).AddRoles("UnknownUser", "%All")
+
+    // Map IPM into all namespaces
+    zpm "enable -community"
+
     zn "IRISAPP"
 
     // Load this module (compiles classes, creates web apps, seeds data, starts production)

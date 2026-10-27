@@ -10,6 +10,26 @@ services:
       - ISC_CPF_MERGE_FILE=/home/irisowner/dev/merge.cpf
     ports:
       - 1972:1972
-      - 52773:52773
     volumes:
       - ./:/home/irisowner/dev
+
+  # The AI Hub EAP image is NoPWS (no private web server): the Web Gateway
+  # sidecar serves the portal, REST API and dashboard over HTTP.
+  webgateway:
+    image: containers.intersystems.com/intersystems/webgateway:latest-cd
+    restart: always
+    environment:
+      - ISC_CSP_IRIS_HOSTNAME=iris
+      - ISC_CSP_IRIS_PORT=1972
+      - ISC_CSP_LOG_LEVEL=warning
+      - ISC_CSP_INI_FILE=/etc/cspgateway/CSP.ini
+      - ISC_CSP_CONF_FILE=/etc/cspgateway/csp-apache.conf
+    ports:
+      - 8082:80
+    volumes:
+      - ./webgateway/csp-apache.conf:/etc/cspgateway/csp-apache.conf
+      - ./webgateway/CSP.ini:/etc/cspgateway/CSP.ini
+      # The dashboard is plain static content: serve it straight from Apache
+      - ./web:/var/www/html/paymentguard:ro
+    depends_on:
+      - iris

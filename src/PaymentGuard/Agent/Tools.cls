@@ -35,9 +35,9 @@ Method GetCustomerProfile(CustomerId As %String) As %DynamicObject
 Method GetRecentTransactions(CustomerId As %String, Days As %Integer) As %DynamicArray
 {
     Set arr = []
-    Set cutoff = $ZDATETIME($ZHOROLOG - Days, 3, 1)
+    Set cutoff = ##class(PaymentGuard.Data.Enricher).HoursAgo(Days * 24)
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP 10 Amount, Currency, Merchant, GeoCountry, Channel, TxnTime, Status FROM PaymentGuard_Data.Transaction WHERE CustomerId = ? AND TxnTime > ? ORDER BY TxnTime DESC")
+    Set tSC = tStmt.%Prepare("SELECT TOP 10 Amount, Currency, Merchant, GeoCountry, Channel, TxnTime, Status FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? AND TxnTime > ? ORDER BY TxnTime DESC")
     If $$$ISERR(tSC) Quit arr
     Set tRS = tStmt.%Execute(CustomerId, cutoff)
     While tRS.%Next() {
@@ -59,9 +59,9 @@ Method GetRecentTransactions(CustomerId As %String, Days As %Integer) As %Dynami
 Method GetVelocity(CustomerId As %String, Hours As %Integer) As %DynamicObject
 {
     Set o = {"count": 0, "total_usd": 0, "distinct_merchants": 0}
-    Set cutoff = $ZDATETIME($ZHOROLOG - (Hours / 24), 3, 1)
+    Set cutoff = ##class(PaymentGuard.Data.Enricher).HoursAgo(Hours)
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(Amount),0) AS Total, COUNT(DISTINCT Merchant) AS Merch FROM PaymentGuard_Data.Transaction WHERE CustomerId = ? AND TxnTime > ?")
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(Amount),0) AS Total, COUNT(DISTINCT Merchant) AS Merch FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? AND TxnTime > ?")
     If $$$ISERR(tSC) Quit o
     Set tRS = tStmt.%Execute(CustomerId, cutoff)
     If tRS.%Next() {
@@ -79,7 +79,7 @@ Method GetDeviceHistory(DeviceId As %String) As %DynamicObject
     Set o = {"known": 0, "txn_count": 0, "customer_count": 0, "country_count": 0, "first_seen": ""}
     If DeviceId = "" Quit o
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, MIN(TxnTime) AS FirstSeen, COUNT(DISTINCT CustomerId) AS Custs, COUNT(DISTINCT GeoCountry) AS Countries FROM PaymentGuard_Data.Transaction WHERE DeviceId = ?")
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, MIN(TxnTime) AS FirstSeen, COUNT(DISTINCT CustomerId) AS Custs, COUNT(DISTINCT GeoCountry) AS Countries FROM PaymentGuard_Data.""Transaction"" WHERE DeviceId = ?")
     If $$$ISERR(tSC) Quit o
     Set tRS = tStmt.%Execute(DeviceId)
     If tRS.%Next() {
@@ -97,11 +97,11 @@ Method GetDeviceHistory(DeviceId As %String) As %DynamicObject
 /// how often its payments end up blocked.
 Method GetMerchantProfile(Merchant As %String) As %DynamicObject
 {
-    Set o = {"merchant": Merchant, "txn_count_30d": 0, "avg_amount_30d": 0, "blocked_30d": 0}
+    Set o = {"merchant": (Merchant), "txn_count_30d": 0, "avg_amount_30d": 0, "blocked_30d": 0}
     If Merchant = "" Quit o
-    Set cutoff = $ZDATETIME($ZHOROLOG - 30, 3, 1)
+    Set cutoff = ##class(PaymentGuard.Data.Enricher).HoursAgo(720)
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(AVG(Amount),0) AS AvgAmt, SUM(CASE WHEN Status = 'BLOCKED' THEN 1 ELSE 0 END) AS Blocked FROM PaymentGuard_Data.Transaction WHERE Merchant = ? AND TxnTime > ?")
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(AVG(Amount),0) AS AvgAmt, SUM(CASE WHEN Status = 'BLOCKED' THEN 1 ELSE 0 END) AS Blocked FROM PaymentGuard_Data.""Transaction"" WHERE Merchant = ? AND TxnTime > ?")
     If $$$ISERR(tSC) Quit o
     Set tRS = tStmt.%Execute(Merchant, cutoff)
     If tRS.%Next() {

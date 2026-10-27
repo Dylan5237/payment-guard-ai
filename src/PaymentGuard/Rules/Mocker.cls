@@ -33,7 +33,8 @@ ClassMethod DecideJSON(pContextJSON As %String) As %String
         Set dev = ctx.%Get("device")
         If $IsObject(dev) {
             If dev.%Get("customer_count") > 1 { Set score = score + 40 Do reasons.%Push("device_shared_across_customers") }
-            If dev.%Get("known") = 0 { Set score = score + 20 Do reasons.%Push("unknown_device") }
+            // a device seen only on this very payment is effectively new
+            If dev.%Get("txn_count") <= 1 { Set score = score + 20 Do reasons.%Push("unknown_device") }
         }
         Set v1 = ctx.%Get("velocity_1h")
         If $IsObject(v1), v1.%Get("count") > 5 { Set score = score + 25 Do reasons.%Push("high_velocity") }

@@ -30,15 +30,21 @@ ClassMethod Seed(pForce As %Boolean = 0) As %Status
     Do ..Customer("cust_risk_001", "Viktor Sokolov", "RETAIL", "RU", "HIGH", "VERIFIED", 0, 400, 400, 30, "dev_risk_001")
     Do ..Customer("cust_blk_001", "Nigel Pryce", "RETAIL", "GB", "MEDIUM", "VERIFIED", 1, 500, 600, 20, "dev_blk_001")
 
-    Do ..History("cust_vip_001", "dev_vip_001", "US", 12, 800, 4000, "Amazon", "LuxWatch Ltd")
-    Do ..History("cust_ret_001", "dev_ret_001", "US", 14, 20, 200, "Amazon", "Uber")
-    Do ..History("cust_ret_002", "dev_ret_002", "BR", 10, 15, 180, "AliExpress", "Uber")
-    Do ..History("cust_ret_003", "dev_ret_003", "CN", 6, 10, 90, "AliExpress", "Steam")
-    Do ..History("cust_sme_001", "dev_sme_001", "PT", 8, 1000, 9000, "AWS", "Dell")
-    Do ..History("cust_sme_002", "dev_sme_002", "DE", 9, 2000, 14000, "AWS", "Siemens")
-    Do ..History("cust_risk_001", "dev_risk_001", "RU", 5, 30, 300, "Steam", "FastElectronics")
+    Set tSC = ..History("cust_vip_001", "dev_vip_001", "US", 12, 800, 4000, "Amazon", "LuxWatch Ltd")
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..History("cust_ret_001", "dev_ret_001", "US", 14, 20, 200, "Amazon", "Uber")
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..History("cust_ret_002", "dev_ret_002", "BR", 10, 15, 180, "AliExpress", "Uber")
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..History("cust_ret_003", "dev_ret_003", "CN", 6, 10, 90, "AliExpress", "Steam")
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..History("cust_sme_001", "dev_sme_001", "PT", 8, 1000, 9000, "AWS", "Dell")
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..History("cust_sme_002", "dev_sme_002", "DE", 9, 2000, 14000, "AWS", "Siemens")
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..History("cust_risk_001", "dev_risk_001", "RU", 5, 30, 300, "Steam", "FastElectronics")
 
-    Quit $$$OK
+    Quit tSC
 }
 
 ClassMethod Customer(pId As %String, pName As %String, pSegment As %String, pCountry As %String, pRisk As %String, pKyc As %String, pBlacklist As %Boolean, pAgeDays As %Integer, pAvgMonthly As %Numeric, pTrust As %Integer, pDevice As %String) As %Status
@@ -60,22 +66,29 @@ ClassMethod Customer(pId As %String, pName As %String, pSegment As %String, pCou
 /// n settled transactions spread over the last 30 days for one customer
 ClassMethod History(pCustomerId As %String, pDeviceId As %String, pCountry As %String, pCount As %Integer, pMinAmt As %Numeric, pMaxAmt As %Numeric, pMerchant1 As %String, pMerchant2 As %String) As %Status
 {
+    Set tSC = $$$OK
     For i = 1:1:pCount {
-        Set t = ##class(PaymentGuard.Data.Transaction).%New()
-        Set t.TxnId = "hist_"_pCustomerId_"_"_i
-        Set t.CustomerId = pCustomerId
-        Set t.Amount = pMinAmt + $RANDOM((pMaxAmt - pMinAmt) \ 10 + 1) * 10
-        Set t.Currency = "USD"
-        Set t.Merchant = $Select($RANDOM(2): pMerchant1, 1: pMerchant2)
-        Set t.MerchantCategory = $Select(t.Merchant = "Steam": "GAMING", t.Merchant = "AWS": "CLOUD", t.Merchant = "Uber": "TRANSPORT", 1: "RETAIL")
-        Set t.Channel = $Select($RANDOM(2): "ECOM", 1: "CARD")
-        Set t.GeoCountry = pCountry
-        Set t.DeviceId = pDeviceId
-        Set t.TxnTime = $ZDATETIME($ZHOROLOG - $RANDOM(720), 3, 1)
-        Set t.Status = "SETTLED"
-        Do t.%Save()
+        Set tSC = ..SaveHistoryTxn(pCustomerId, pDeviceId, pCountry, pMinAmt, pMaxAmt, pMerchant1, pMerchant2, i)
+        If $$$ISERR(tSC) Quit
     }
-    Quit $$$OK
+    Quit tSC
+}
+
+ClassMethod SaveHistoryTxn(pCustomerId As %String, pDeviceId As %String, pCountry As %String, pMinAmt As %Numeric, pMaxAmt As %Numeric, pMerchant1 As %String, pMerchant2 As %String, pIdx As %Integer) As %Status
+{
+    Set t = ##class(PaymentGuard.Data.Transaction).%New()
+    Set t.TxnId = "hist_"_pCustomerId_"_"_pIdx
+    Set t.CustomerId = pCustomerId
+    Set t.Amount = pMinAmt + ($RANDOM(((pMaxAmt - pMinAmt) \ 10) + 1) * 10)
+    Set t.Currency = "USD"
+    Set t.Merchant = $Select($RANDOM(2): pMerchant1, 1: pMerchant2)
+    Set t.MerchantCategory = $Select(t.Merchant = "Steam": "GAMING", t.Merchant = "AWS": "CLOUD", t.Merchant = "Uber": "TRANSPORT", 1: "RETAIL")
+    Set t.Channel = $Select($RANDOM(2): "ECOM", 1: "CARD")
+    Set t.GeoCountry = pCountry
+    Set t.DeviceId = pDeviceId
+    Set t.TxnTime = $ZDATETIME($HOROLOG - $RANDOM(29), 3, 1)
+    Set t.Status = "SETTLED"
+    Quit t.%Save()
 }
 
 /// Generate one random payment request: ~55% benign, ~25% gray zone,
@@ -83,7 +96,7 @@ ClassMethod History(pCustomerId As %String, pDeviceId As %String, pCountry As %S
 ClassMethod GenTxn() As PaymentGuard.Request.Payment
 {
     Set req = ##class(PaymentGuard.Request.Payment).%New()
-    Set req.TxnId = "txn_"_$ZDATETIME($ZHOROLOG, 8)_"_"_$RANDOM(999999)
+    Set req.TxnId = "txn_"_$Piece($Horolog,",",1)_$Piece($Horolog,",",2)_"_"_$RANDOM(999999)
     Set pattern = $RANDOM(100)
 
     If pattern < 55 {

@@ -1,4 +1,4 @@
-Include (%occStatus, EnsTypes)
+Include (%occStatus)
 
 /// Puts an AI Hub agent inside an interoperability production.
 ///
@@ -46,7 +46,7 @@ Method Decide(pRequest As PaymentGuard.Request.AgentDecision, Output pResponse A
     // ^PaymentGuardSettings("MockMode") (used by the test suite), or no
     // configured API key at all.
     If ..MockMode || $Get(^PaymentGuardSettings("MockMode")) {
-        Do $$$LOGINFO("Agent operation in mock mode, txn="_pRequest.TxnId)
+        Do ##class(Ens.Util.Log).LogInfo($classname(),"Decide","Agent operation in mock mode, txn="_pRequest.TxnId)
         Set pResponse.RawContent = ##class(PaymentGuard.Rules.Mocker).DecideJSON(pRequest.ContextJSON)
         Set pResponse.Model = "mock-engine"
         Set pResponse.MockMode = 1
@@ -54,7 +54,7 @@ Method Decide(pRequest As PaymentGuard.Request.AgentDecision, Output pResponse A
         Quit $$$OK
     }
     If ##class(PaymentGuard.Util.Config).MockRequested() {
-        Do $$$LOGINFO("No API key configured - falling back to mock engine, txn="_pRequest.TxnId)
+        Do ##class(Ens.Util.Log).LogInfo($classname(),"Decide","No API key configured - falling back to mock engine, txn="_pRequest.TxnId)
         Set pResponse.RawContent = ##class(PaymentGuard.Rules.Mocker).DecideJSON(pRequest.ContextJSON)
         Set pResponse.Model = "mock-engine"
         Set pResponse.MockMode = 1
@@ -73,7 +73,7 @@ Method Decide(pRequest As PaymentGuard.Request.AgentDecision, Output pResponse A
     Try {
         Set llmResponse = agent.Chat(session, chatMsg)
     } Catch ex {
-        Quit $$$ERROR($$$GeneralError, "AI Hub agent chat failed: "_ex.DisplayString())
+        Return $$$ERROR($$$GeneralError, "AI Hub agent chat failed: "_ex.DisplayString())
     }
 
     // Persist the session so any decision can be replayed/audited later
@@ -91,7 +91,7 @@ Method Decide(pRequest As PaymentGuard.Request.AgentDecision, Output pResponse A
     Set pResponse.ToolCalls = stats."total_tool_calls"
     Set pResponse.LatencyMs = ($ZH - tStart) * 1000 \ 1
 
-    Do $$$LOGINFO("Agent decided txn="_pRequest.TxnId_" model="_pResponse.Model_" tokens="_(pResponse.PromptTokens + pResponse.CompletionTokens)_" latency_ms="_pResponse.LatencyMs)
+    Do ##class(Ens.Util.Log).LogInfo($classname(),"Decide","Agent decided txn="_pRequest.TxnId_" model="_pResponse.Model_" tokens="_(pResponse.PromptTokens + pResponse.CompletionTokens)_" latency_ms="_pResponse.LatencyMs)
     Quit $$$OK
 }
 

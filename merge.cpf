@@ -6,3 +6,5 @@ CreateDatabase:Name=IRISAPP_CODE,Directory=/usr/irissys/mgr/IRISAPP_CODE,Resourc
 CreateNamespace:Name=IRISAPP,Globals=IRISAPP_DATA,Routines=IRISAPP_CODE,Interop=1
 [Startup]
 SystemMode=PaymentGuard AI
+WebServer=1
+WebServerPort=52773

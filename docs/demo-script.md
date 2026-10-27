@@ -3,7 +3,7 @@
 ~3 minutes, recorded at 1080p. Prepare: `.env` with a real `DEEPSEEK_API_KEY`,
 `AGENT_MOCK=0`, stack running.
 
-1. **[0:00] One-liner + dashboard open** — http://localhost:52773/csp/paymentguard/index.html
+1. **[0:00] One-liner + dashboard open** — http://localhost:8082/paymentguard/
    "This is PaymentGuard AI — an InterSystems IRIS interoperability production
    where an AI Hub agent makes live payment-risk decisions."
 

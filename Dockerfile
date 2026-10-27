@@ -15,6 +15,8 @@ COPY iris.script /home/irisowner/dev/iris.script
 
 RUN --mount=type=bind,src=.,dst=. \
     iris start IRIS && \
+    sleep 5 && \
     iris merge IRIS /home/irisowner/dev/merge.cpf && \
+    sleep 5 && \
     iris session IRIS < iris.script && \
     iris stop IRIS quietly

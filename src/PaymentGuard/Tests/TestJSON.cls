@@ -1,4 +1,4 @@
-Include (%occStatus, %UnitTest)
+Include (%occStatus)
 
 /// Unit tests for defensive LLM-output parsing and decision validation.
 Class PaymentGuard.Tests.TestJSON Extends %UnitTest.TestCase
@@ -30,9 +30,9 @@ Method TestJSONWithProse()
 Method TestGarbage()
 {
     Set o = ##class(PaymentGuard.Util.JSON).ExtractObject("no json here at all")
-    Do $$$AssertFalse($IsObject(o), "garbage returns not-an-object")
+    Do $$$AssertEquals(0, $IsObject(o), "garbage returns not-an-object")
     Set o2 = ##class(PaymentGuard.Util.JSON).ExtractObject("")
-    Do $$$AssertFalse($IsObject(o2), "empty returns not-an-object")
+    Do $$$AssertEquals(0, $IsObject(o2), "empty returns not-an-object")
 }
 
 Method TestValidDecision()
@@ -41,13 +41,13 @@ Method TestValidDecision()
     Do $$$AssertTrue(##class(PaymentGuard.Util.Validator).ValidDecision(good), "well-formed decision validates")
 
     Set badAction = {"action": "MAYBE", "risk_score": 20}
-    Do $$$AssertFalse(##class(PaymentGuard.Util.Validator).ValidDecision(badAction), "bad action rejected")
+    Do $$$AssertEquals(0, ##class(PaymentGuard.Util.Validator).ValidDecision(badAction), "bad action rejected")
 
     Set badRisk = {"action": "APPROVE", "risk_score": 150}
-    Do $$$AssertFalse(##class(PaymentGuard.Util.Validator).ValidDecision(badRisk), "risk 150 rejected")
+    Do $$$AssertEquals(0, ##class(PaymentGuard.Util.Validator).ValidDecision(badRisk), "risk 150 rejected")
 
     Set noAction = {"risk_score": 20}
-    Do $$$AssertFalse(##class(PaymentGuard.Util.Validator).ValidDecision(noAction), "missing action rejected")
+    Do $$$AssertEquals(0, ##class(PaymentGuard.Util.Validator).ValidDecision(noAction), "missing action rejected")
 }
 
 }

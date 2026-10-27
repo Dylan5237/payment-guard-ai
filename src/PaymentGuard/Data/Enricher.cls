@@ -43,15 +43,26 @@ ClassMethod CustomerObject(pCust As PaymentGuard.Data.Customer, pCustomerId As %
     Quit o
 }
 
+/// %TimeStamp exactly pHours hours ago (safe for any lookback window).
+ClassMethod HoursAgo(pHours As %Integer) As %String
+{
+    Set day = $Piece($Horolog, ",", 1)
+    Set sec = $Piece($Horolog, ",", 2) - (pHours * 3600)
+    Set day = day + (sec \ 86400)
+    Set sec = sec # 86400
+    If sec < 0 Set day = day - 1, sec = sec + 86400
+    Quit $ZDateTime(day_","_sec, 3, 1)
+}
+
 /// Count/sum of payment attempts in the last pHours hours (blocked attempts
 /// included — they matter for velocity).
 ClassMethod Velocity(pCustomerId As %String, pHours As %Integer) As %DynamicObject
 {
     Set o = {"count": 0, "total_usd": 0, "avg_usd": 0, "distinct_merchants": 0}
     If pCustomerId = "" Quit o
-    Set cutoff = $ZDATETIME($ZHOROLOG - (pHours / 24), 3, 1)
+    Set cutoff = ..HoursAgo(pHours)
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(Amount),0) AS Total, COUNT(DISTINCT Merchant) AS Merch FROM PaymentGuard_Data.Transaction WHERE CustomerId = ? AND TxnTime > ?")
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(Amount),0) AS Total, COUNT(DISTINCT Merchant) AS Merch FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? AND TxnTime > ?")
     If $$$ISERR(tSC) Quit o
     Set tRS = tStmt.%Execute(pCustomerId, cutoff)
     If tRS.%Next() {
@@ -68,7 +79,7 @@ ClassMethod RecentTransactions(pCustomerId As %String, pLimit As %Integer) As %D
     Set arr = []
     If pCustomerId = "" Quit arr
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP ? Amount, Currency, Merchant, MerchantCategory, GeoCountry, Channel, TxnTime, Status FROM PaymentGuard_Data.Transaction WHERE CustomerId = ? ORDER BY TxnTime DESC")
+    Set tSC = tStmt.%Prepare("SELECT TOP ? Amount, Currency, Merchant, MerchantCategory, GeoCountry, Channel, TxnTime, Status FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? ORDER BY TxnTime DESC")
     If $$$ISERR(tSC) Quit arr
     Set tRS = tStmt.%Execute(pLimit, pCustomerId)
     While tRS.%Next() {
@@ -96,7 +107,7 @@ ClassMethod DeviceHistory(pDeviceId As %String) As %DynamicObject
         Quit o
     }
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, MIN(TxnTime) AS FirstSeen, COUNT(DISTINCT CustomerId) AS Custs, COUNT(DISTINCT GeoCountry) AS Countries FROM PaymentGuard_Data.Transaction WHERE DeviceId = ?")
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, MIN(TxnTime) AS FirstSeen, COUNT(DISTINCT CustomerId) AS Custs, COUNT(DISTINCT GeoCountry) AS Countries FROM PaymentGuard_Data.""Transaction"" WHERE DeviceId = ?")
     If $$$ISERR(tSC) Quit o
     Set tRS = tStmt.%Execute(pDeviceId)
     If tRS.%Next() {
@@ -113,11 +124,11 @@ ClassMethod DeviceHistory(pDeviceId As %String) As %DynamicObject
 /// 30-day profile of the merchant.
 ClassMethod MerchantProfile(pMerchant As %String) As %DynamicObject
 {
-    Set o = {"merchant": pMerchant, "txn_count_30d": 0, "avg_amount_30d": 0, "blocked_30d": 0}
+    Set o = {"merchant": (pMerchant), "txn_count_30d": 0, "avg_amount_30d": 0, "blocked_30d": 0}
     If pMerchant = "" Quit o
-    Set cutoff = $ZDATETIME($ZHOROLOG - 30, 3, 1)
+    Set cutoff = ..HoursAgo(720)
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(AVG(Amount),0) AS AvgAmt, SUM(CASE WHEN Status = 'BLOCKED' THEN 1 ELSE 0 END) AS Blocked FROM PaymentGuard_Data.Transaction WHERE Merchant = ? AND TxnTime > ?")
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(AVG(Amount),0) AS AvgAmt, SUM(CASE WHEN Status = 'BLOCKED' THEN 1 ELSE 0 END) AS Blocked FROM PaymentGuard_Data.""Transaction"" WHERE Merchant = ? AND TxnTime > ?")
     If $$$ISERR(tSC) Quit o
     Set tRS = tStmt.%Execute(pMerchant, cutoff)
     If tRS.%Next() {

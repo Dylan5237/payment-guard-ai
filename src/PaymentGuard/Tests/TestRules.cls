@@ -1,4 +1,4 @@
-Include (%occStatus, %UnitTest)
+Include (%occStatus)
 
 /// Unit tests for the deterministic rule engine.
 Class PaymentGuard.Tests.TestRules Extends %UnitTest.TestCase

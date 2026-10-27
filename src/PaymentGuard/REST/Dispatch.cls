@@ -26,6 +26,17 @@ XData UrlMap
   <Route Url="/cases" Method="GET" Call="ListCases"/>
   <Route Url="/stats" Method="GET" Call="Stats"/>
   <Route Url="/admin/reseed" Method="POST" Call="Reseed"/>
+  <!-- .csp-suffixed twins: the Web Gateway's Apache module only intercepts
+       requests whose path carries a listed file extension, so the gateway
+       rewrites extensionless REST URLs to *.csp before they reach IRIS -->
+  <Route Url="/health.csp" Method="GET" Call="Health"/>
+  <Route Url="/payments.csp" Method="POST" Call="CreatePayment"/>
+  <Route Url="/payments/batch.csp" Method="POST" Call="BatchPayments"/>
+  <Route Url="/transactions.csp" Method="GET" Call="ListTransactions"/>
+  <Route Url="/decisions.csp" Method="GET" Call="ListDecisions"/>
+  <Route Url="/cases.csp" Method="GET" Call="ListCases"/>
+  <Route Url="/stats.csp" Method="GET" Call="Stats"/>
+  <Route Url="/admin/reseed.csp" Method="POST" Call="Reseed"/>
 </Routes>
 }
 
@@ -42,9 +53,9 @@ ClassMethod ReadBody() As %DynamicObject
     If text = "" Quit ""
     Set text = $ZConvert(text, "I", "UTF8")
     Try {
-        Quit ##class(%DynamicObject).%FromJSON(text)
+        Return ##class(%DynamicObject).%FromJSON(text)
     } Catch ex {
-        Quit ""
+        Return ""
     }
 }
 
@@ -55,18 +66,30 @@ ClassMethod WriteJSON(pObj As %DynamicObject, pStatus As %Integer = 200) As %Sta
     Quit $$$OK
 }
 
-ClassMethod Error(pStatus As %Integer, pMsg As %String) As %Status
+ClassMethod WriteError(pStatus As %Integer, pMsg As %String) As %Status
 {
     Set %response.Status = pStatus
     Write {"error": (pMsg)}.%ToJSON()
     Quit $$$OK
 }
 
+/// Get a handle to the entry business service, self-healing: if the
+/// production is not running (e.g. fresh container, no auto-start yet),
+/// start it and retry once.
+ClassMethod GetBusinessService(Output pBS) As %Status
+{
+    Set pSC = ##class(Ens.Director).CreateBusinessService(..#BSTARGET, .pBS)
+    If $$$ISOK(pSC) Quit pSC
+    Do ##class(PaymentGuard.Util.Setup).EnsureRunning()
+    Hang 2
+    Quit ##class(Ens.Director).CreateBusinessService(..#BSTARGET, .pBS)
+}
+
 /// Submit one payment request through the production; pTimeout leaves room
 /// for the LLM to answer on live agent mode.
 ClassMethod SubmitPayment(pReq As PaymentGuard.Request.Payment, Output pResp As PaymentGuard.Response.Decision, Output pSC As %Status) As %Boolean
 {
-    Set pSC = ##class(EnsLib.Director).CreateBusinessService(..#BSTARGET, .tBS)
+    Set pSC = ..GetBusinessService(.tBS)
     If $$$ISERR(pSC) Quit 0
     Set pSC = tBS.SendRequestSync(..#DECISIONTARGET, pReq, .pResp, 120)
     Quit $$$ISOK(pSC)
@@ -77,7 +100,7 @@ ClassMethod SubmitPayment(pReq As PaymentGuard.Request.Payment, Output pResp As 
 /// Liveness + configuration snapshot
 ClassMethod Health() As %Status
 {
-    Set sc = ##class(EnsLib.Director).CreateBusinessService(..#BSTARGET, .tBS)
+    Set sc = ##class(Ens.Director).CreateBusinessService(..#BSTARGET, .tBS)
     Set key = ##class(PaymentGuard.Util.Config).APIKey()
     Set o = {}
     Do o.%Set("app", "paymentguard")
@@ -93,9 +116,9 @@ ClassMethod Health() As %Status
 ClassMethod CreatePayment() As %Status
 {
     Set body = ..ReadBody()
-    If '$IsObject(body) Quit ..Error(400, "Invalid or missing JSON body")
-    If body.%Get("customer_id") = "" Quit ..Error(400, "customer_id is required")
-    If (+body.%Get("amount")) <= 0 Quit ..Error(400, "amount must be a positive number")
+    If '$IsObject(body) Quit ..WriteError(400, "Invalid or missing JSON body")
+    If body.%Get("customer_id") = "" Quit ..WriteError(400, "customer_id is required")
+    If (+body.%Get("amount")) <= 0 Quit ..WriteError(400, "amount must be a positive number")
 
     Set req = ##class(PaymentGuard.Request.Payment).%New()
     Set req.TxnId = body.%Get("txn_id")
@@ -110,7 +133,7 @@ ClassMethod CreatePayment() As %Status
     Set req.TxnTime = body.%Get("txn_time")
 
     If '..SubmitPayment(req, .resp, .sc) {
-        Quit ..Error(503, "Production call failed - is the PaymentGuard production running? "_$System.Status.GetErrorText(sc))
+        Quit ..WriteError(503, "Production call failed - is the PaymentGuard production running? "_$System.Status.GetErrorText(sc))
     }
     Quit ..WriteJSON(resp.ToAPIJSON(), 201)
 }
@@ -151,8 +174,8 @@ ClassMethod ListTransactions() As %Status
     If limit > 200 Set limit = 200
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP ? TxnId, CustomerId, Amount, Currency, Merchant, GeoCountry, Channel, Status, TxnTime FROM PaymentGuard_Data.Transaction ORDER BY ID DESC")
-    If $$$ISERR(tSC) Quit ..Error(500, $System.Status.GetErrorText(tSC))
+    Set tSC = tStmt.%Prepare("SELECT TOP ? TxnId, CustomerId, Amount, Currency, Merchant, GeoCountry, Channel, Status, TxnTime FROM PaymentGuard_Data.""Transaction"" ORDER BY ID DESC")
+    If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
     Set tRS = tStmt.%Execute(limit)
     While tRS.%Next() {
         Set row = {}
@@ -179,7 +202,7 @@ ClassMethod ListDecisions() As %Status
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
     Set tSC = tStmt.%Prepare("SELECT TOP ? TxnId, CustomerId, Amount, Action, Source, RiskScore, Confidence, ReasonCodes, Summary, Model, SessionId, PromptTokens, CompletionTokens, ToolCalls, LatencyMs, CreatedAt FROM PaymentGuard_Data.Decision ORDER BY ID DESC")
-    If $$$ISERR(tSC) Quit ..Error(500, $System.Status.GetErrorText(tSC))
+    If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
     Set tRS = tStmt.%Execute(limit)
     While tRS.%Next() {
         Set row = {}
@@ -222,7 +245,7 @@ ClassMethod ListCases() As %Status
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
     Set tSC = tStmt.%Prepare("SELECT TOP ? CaseId, TxnId, CustomerId, Type, Priority, RiskScore, Status, Summary, CreatedAt FROM PaymentGuard_Data.CaseRecord ORDER BY ID DESC")
-    If $$$ISERR(tSC) Quit ..Error(500, $System.Status.GetErrorText(tSC))
+    If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
     Set tRS = tStmt.%Execute(limit)
     While tRS.%Next() {
         Set row = {}
@@ -284,7 +307,7 @@ ClassMethod Stats() As %Status
 ClassMethod Reseed() As %Status
 {
     Set sc = ##class(PaymentGuard.Data.Populate).Seed(1)
-    If $$$ISERR(sc) Quit ..Error(500, $System.Status.GetErrorText(sc))
+    If $$$ISERR(sc) Quit ..WriteError(500, $System.Status.GetErrorText(sc))
     Quit ..WriteJSON({"reseeded": (1)})
 }
 

@@ -33,11 +33,9 @@ ClassMethod ExtractObject(pContent As %String) As %DynamicObject
     // Otherwise: first '{' to last '}'
     Set start = $Find(text, "{")
     If start = 0 Quit ""
-    Set last = 0, pos = 0
-    While 1 {
-        Set pos = $Find(text, "}", pos)
-        Quit:pos = 0
-        Set last = pos
+    Set last = 0
+    For i = 1:1:$Length(text) {
+        If $Extract(text, i) = "}" Set last = i
     }
     If last = 0 Quit ""
     Set candidate = $Extract(text, start - 1, last)

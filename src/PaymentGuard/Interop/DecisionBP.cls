@@ -1,4 +1,4 @@
-Include (%occStatus, EnsTypes)
+Include (%occStatus)
 
 /// The decision orchestrator of the PaymentGuard production.
 ///
@@ -33,10 +33,11 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
     Set action = "REVIEW", source = "FALLBACK", riskScore = 50, confidence = 0.5
     Set reasonCodes = "[]", summary = "", model = "", sessionId = ""
     Set promptTokens = 0, completionTokens = 0, latencyMs = 0
+    Set aResp = ""
 
     // ── 1. Persist the attempt ────────────────────────────────
     Set txn = ##class(PaymentGuard.Data.Transaction).%New()
-    Set txn.TxnId = $Select(pRequest.TxnId '="": pRequest.TxnId, 1: "txn_"_$ZDATETIME($ZHOROLOG, 8)_"_"_$RANDOM(999999))
+    Set txn.TxnId = $Select(pRequest.TxnId '="": pRequest.TxnId, 1: "txn_"_$Piece($Horolog,",",1)_$Piece($Horolog,",",2)_"_"_$RANDOM(999999))
     Set txn.CustomerId = pRequest.CustomerId
     Set txn.Amount = pRequest.Amount
     Set txn.Currency = $Select(pRequest.Currency '="": pRequest.Currency, 1: "USD")
@@ -68,7 +69,7 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
         Do reasonCodes.%Push(ruleName)
         Set summary = ruleReason
         Set model = ""
-        Do $$$LOGINFO("Rules decided txn="_txnId_" action="_action_" rule="_ruleName)
+        Do ##class(Ens.Util.Log).LogInfo($classname(),"OnRequest","Rules decided txn="_txnId_" action="_action_" rule="_ruleName)
     } Else {
 
         // ── 4. Gray zone: the AI Hub agent decides ────────────
@@ -87,7 +88,7 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
             Set reasonCodes = ##class(%DynamicArray).%New()
             Do reasonCodes.%Push("agent_call_failed")
             Set summary = "AI Risk Agent unavailable - routed to human review. "_$System.Status.GetErrorText(agentSC)
-            Do $$$LOGWARNING("Agent call failed for txn="_txnId_": "_$System.Status.GetErrorText(agentSC))
+            Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Agent call failed for txn="_txnId_": "_$System.Status.GetErrorText(agentSC))
         } Else {
             Set d = ##class(PaymentGuard.Util.JSON).ExtractObject(aResp.RawContent)
             If (d = "") || '##class(PaymentGuard.Util.Validator).ValidDecision(d) {
@@ -98,12 +99,12 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
                 Set reasonCodes = ##class(%DynamicArray).%New()
                 Do reasonCodes.%Push("agent_output_invalid")
                 Set summary = "AI Risk Agent returned an unparseable or invalid decision - routed to human review"
-                Do $$$LOGWARNING("Invalid agent output for txn="_txnId)
+                Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Invalid agent output for txn="_txnId)
             } Else {
                 Set action = d.action
                 Set source = $Select(aResp.MockMode: "MOCK", 1: "AGENT")
-                Set riskScore = d.risk_score
-                Set confidence = d.confidence
+                Set riskScore = d.%Get("risk_score")
+                Set confidence = d.%Get("confidence")
                 Set reasonCodes = d.%Get("reasons")
                 Set summary = d.%Get("summary")
             }
@@ -131,7 +132,7 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
     Set routeSC = ..SendRequestSync(target, msg, .routeResp)
     If $$$ISERR(routeSC) {
         // Routing failure must not lose the decision itself
-        Do $$$LOGWARNING("Routing to "_target_" failed for txn="_txnId_": "_$System.Status.GetErrorText(routeSC))
+        Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Routing to "_target_" failed for txn="_txnId_": "_$System.Status.GetErrorText(routeSC))
     }
 
     // ── 6. Audit record + close the transaction ───────────────
@@ -196,8 +197,8 @@ ClassMethod PaymentJSON(pReq As PaymentGuard.Request.Payment, pTxnId As %String)
 
 ClassMethod ParseTime(pTime As %String) As %TimeStamp
 {
-    If pTime = "" Quit $ZDATETIME($ZHOROLOG, 3, 1)
-    Set out = $ZDATETIME($ZHOROLOG, 3, 1)
+    If pTime = "" Quit $ZDATETIME($HOROLOG, 3, 1)
+    Set out = $ZDATETIME($HOROLOG, 3, 1)
     Try {
         Set internal = $ZDATETIMEH(pTime, 3, 1)
         Set out = $ZDATETIME(internal, 3, 1)

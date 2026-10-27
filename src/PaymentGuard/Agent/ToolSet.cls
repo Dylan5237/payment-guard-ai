@@ -1,5 +1,5 @@
 /// ToolSet packaging the risk intelligence tools for the agent.
-Class PaymentGuard.Agent.ToolSet Extends %AI.ToolSet
+Class PaymentGuard.Agent.ToolSet Extends %AI.ToolSet [ DependsOn = PaymentGuard.Agent.Tools ]
 {
 
 XData Definition [ MimeType = application/xml ]

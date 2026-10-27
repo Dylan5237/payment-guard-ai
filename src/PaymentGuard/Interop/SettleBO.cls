@@ -1,4 +1,4 @@
-Include (%occStatus, EnsTypes)
+Include (%occStatus)
 
 /// Marks approved payments as settled. In a real deployment this operation
 /// would call the ledger / acquiring system; here it closes the loop in IRIS.
@@ -24,7 +24,7 @@ Method OnDecisionMade(pRequest As PaymentGuard.Msg.DecisionMade, Output pRespons
         Set txn.Status = "SETTLED"
         Do txn.%Save()
     }
-    Do $$$LOGINFO("Settled txn="_pRequest.TxnId_" risk="_pRequest.RiskScore)
+    Do ##class(Ens.Util.Log).LogInfo($classname(),"OnDecisionMade","Settled txn="_pRequest.TxnId_" risk="_pRequest.RiskScore)
     Quit $$$OK
 }
 

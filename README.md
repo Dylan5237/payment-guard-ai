@@ -71,17 +71,26 @@ The production item **"PaymentGuard AI Risk Agent"** is the contest's centerpiec
 
 ### Prerequisites
 
-- Docker with the **IRIS AI Hub EAP community image** (contest requirement). Download
-  `iris-community-2026.3.0AI.154.0-docker.tar.gz` (amd64) from the
-  [Early Access Program portal](https://evaluation.intersystems.com/Eval/early-access/AIHub)
+- Docker with the **IRIS AI Hub EAP community image** (contest requirement — note:
+  the community image, not the plain EAP image; only the community license covers
+  interoperability). Download `iris-community-2026.3.0AI.154.0-docker.tar.gz`
+  (amd64) from the [Early Access Program portal](https://evaluation.intersystems.com/Eval/early-access/AIHub)
   (free InterSystems account required), then:
 
   ```bash
   docker load -i iris-community-2026.3.0AI.154.0-docker.tar.gz
+  docker pull containers.intersystems.com/intersystems/webgateway:latest-cd
   ```
 
   > If the loaded tag differs from the one in the `Dockerfile`, adjust the
   > `ARG IMAGE` line at the top.
+
+> **Why a Web Gateway sidecar?** The 2026.3 AI Hub EAP builds are *NoPWS*: the
+> private web server on port 52773 is disabled and there is no Management
+> Portal listener inside the IRIS container. The stack therefore runs the
+> standard InterSystems **Web Gateway** as a second container: it serves the
+> Management Portal, the REST API and the dashboard over HTTP and talks to
+> IRIS through the web-gateway protocol on port 1972.
 
 ### Run
 
@@ -96,8 +105,9 @@ Then open:
 
 | What | URL |
 |---|---|
-| **Live dashboard** (decision feed, stats, burst simulator) | http://localhost:52773/csp/paymentguard/index.html |
-| Management Portal (production, message viewer) | http://localhost:52773/csp/sys/UtilHome.csp — `SuperUser` / `SYS` |
+| **Live dashboard** (decision feed, stats, burst simulator) | http://localhost:8082/paymentguard/ |
+| Management Portal (production, message viewer) | http://localhost:8082/csp/sys/UtilHome.csp — `SuperUser` / `SYS` |
+| REST API base | http://localhost:8082/paymentguard/api |
 | Production config | Portal → Interoperability → productions → `PaymentGuard.Production` |
 
 Without an API key the stack still runs end-to-end in **mock mode** (`/health` reports
@@ -120,7 +130,11 @@ dependencies. Add a key and recreate the container to go live.
 
 ## API
 
-Base: `http://localhost:52773/paymentguard/api`
+Base: `http://localhost:8082/paymentguard/api`
+
+> The Web Gateway's Apache module dispatches by file extension, so the stack
+> internally rewrites extensionless REST URLs to a `.csp` twin route — both
+> `POST /payments` and `POST /payments.csp` work from outside.
 
 | Method & path | Description |
 |---|---|
@@ -152,19 +166,19 @@ Try a few:
 
 ```bash
 # instant rule-based block (sanctioned geo)
-curl -s -X POST localhost:52773/paymentguard/api/payments -H "Content-Type: application/json" \
+curl -s -X POST localhost:8082/paymentguard/api/payments -H "Content-Type: application/json" \
   -d '{"customer_id":"cust_ret_001","amount":99,"geo_country":"KP","merchant":"Amazon"}'
 
 # instant fast-path approve (trusted customer, small, home country, known device)
-curl -s -X POST localhost:52773/paymentguard/api/payments -H "Content-Type: application/json" \
+curl -s -X POST localhost:8082/paymentguard/api/payments -H "Content-Type: application/json" \
   -d '{"customer_id":"cust_vip_001","amount":90,"geo_country":"US","device_id":"dev_vip_001","merchant":"Amazon"}'
 
 # gray zone → the AI agent decides (new device, odd geo, elevated amount)
-curl -s -X POST localhost:52773/paymentguard/api/payments -H "Content-Type: application/json" \
+curl -s -X POST localhost:8082/paymentguard/api/payments -H "Content-Type: application/json" \
   -d '{"customer_id":"cust_ret_003","amount":430,"geo_country":"SG","device_id":"dev_new_9","merchant":"GadgetWorld"}'
 
 # fraud-flavored burst
-curl -s -X POST localhost:52773/paymentguard/api/payments/batch -H "Content-Type: application/json" -d '{"count":8}'
+curl -s -X POST localhost:8082/paymentguard/api/payments/batch -H "Content-Type: application/json" -d '{"count":8}'
 ```
 
 Seeded demo customers: `cust_vip_001` (trusted VIP), `cust_ret_001..003` (retail, one
@@ -201,6 +215,7 @@ and audit-trail cases) — it runs offline, no API key needed.
 
 ```
 ├── Dockerfile / docker-compose.yml / merge.cpf / iris.script   # container build on the EAP image
+├── webgateway/                    # Web Gateway sidecar config (CSP.ini + Apache conf)
 ├── module.xml                     # IPM package: classes, web apps, dashboard files, install hook
 ├── src/PaymentGuard/
 │   ├── Agent/       RiskAgent (%AI.Agent), Tools (%AI.Tool), ToolSet (%AI.ToolSet)

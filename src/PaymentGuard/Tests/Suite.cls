@@ -7,7 +7,8 @@ Class PaymentGuard.Tests.Suite
 
 ClassMethod RunAll() As %Status
 {
-    Quit ##class(%UnitTest.Manager).RunTest("PaymentGuard.Tests", "/nodebug")
+    // /noload mode takes comma-separated, fully-qualified test class names
+    Quit ##class(%UnitTest.Manager).RunTest("PaymentGuard.Tests.TestRules,PaymentGuard.Tests.TestJSON,PaymentGuard.Tests.TestMockFlow", "/noload/nodebug")
 }
 
 }

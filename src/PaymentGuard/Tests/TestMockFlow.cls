@@ -1,11 +1,11 @@
-Include (%occStatus, %UnitTest)
+Include (%occStatus)
 
 /// End-to-end tests: real production, real message flow, mock agent engine
 /// (forced via ^PaymentGuardSettings("MockMode")) — runs fully offline.
 Class PaymentGuard.Tests.TestMockFlow Extends %UnitTest.TestCase
 {
 
-ClassMethod OnBeforeAllTests() As %Status
+Method OnBeforeAllTests() As %Status
 {
     // Force the agent operation into mock mode for this test run
     Set ^PaymentGuardSettings("MockMode") = 1
@@ -13,7 +13,7 @@ ClassMethod OnBeforeAllTests() As %Status
     Quit ##class(PaymentGuard.Util.Setup).EnsureRunning()
 }
 
-ClassMethod OnAfterAllTests() As %Status
+Method OnAfterAllTests() As %Status
 {
     Kill ^PaymentGuardSettings("MockMode")
     Quit $$$OK
@@ -21,7 +21,7 @@ ClassMethod OnAfterAllTests() As %Status
 
 ClassMethod Submit(pReq As PaymentGuard.Request.Payment, Output pResp As PaymentGuard.Response.Decision) As %Status
 {
-    Set sc = ##class(EnsLib.Director).CreateBusinessService("PaymentGuard REST", .tBS)
+    Set sc = ##class(Ens.Director).CreateBusinessService("PaymentGuard REST", .tBS)
     Quit:$$$ISERR(sc) sc
     Quit tBS.SendRequestSync("PaymentGuard Decision", pReq, .pResp, 60)
 }
@@ -64,7 +64,7 @@ Method TestGrayZoneGoesToAgent()
     Set sc = ..Submit(req, .resp)
     Do $$$AssertStatusOK(sc)
     Do $$$AssertEquals(resp.Source, "MOCK", "gray zone reached the (mock) agent")
-    Do $$$AssertTrue(resp.Action = "APPROVE" || resp.Action = "REVIEW" || resp.Action = "BLOCK", "valid action from mock engine")
+    Do $$$AssertTrue((resp.Action = "APPROVE") || (resp.Action = "REVIEW") || (resp.Action = "BLOCK"), "valid action from mock engine")
     Do $$$AssertTrue(resp.RiskScore >= 0 && resp.RiskScore <= 100, "risk score in range")
 }
 
