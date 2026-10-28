@@ -23,6 +23,7 @@ XData UrlMap
   <Route Url="/payments/batch" Method="POST" Call="BatchPayments"/>
   <Route Url="/claims" Method="POST" Call="CreateClaim"/>
   <Route Url="/transactions" Method="GET" Call="ListTransactions"/>
+  <Route Url="/similar" Method="GET" Call="SimilarTransactions"/>
   <Route Url="/decisions" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases" Method="GET" Call="ListCases"/>
   <Route Url="/stats" Method="GET" Call="Stats"/>
@@ -35,6 +36,7 @@ XData UrlMap
   <Route Url="/payments/batch.csp" Method="POST" Call="BatchPayments"/>
   <Route Url="/claims.csp" Method="POST" Call="CreateClaim"/>
   <Route Url="/transactions.csp" Method="GET" Call="ListTransactions"/>
+  <Route Url="/similar.csp" Method="GET" Call="SimilarTransactions"/>
   <Route Url="/decisions.csp" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases.csp" Method="GET" Call="ListCases"/>
   <Route Url="/stats.csp" Method="GET" Call="Stats"/>
@@ -228,6 +230,22 @@ ClassMethod ListTransactions() As %Status
         Do arr.%Push(row)
     }
     Quit ..WriteJSON({"transactions": (arr)})
+}
+
+/// Semantic nearest neighbors of a stored transaction: IRIS Vector Search
+/// (cosine) over Embedded-Python feature embeddings. Demo/inspection helper
+/// mirroring the agent tool.
+ClassMethod SimilarTransactions() As %Status
+{
+    Set txnId = %request.Data("txn_id", 1)
+    If txnId = "" Quit ..WriteError(400, "txn_id is required")
+    Set limit = +(%request.Data("limit", 1))
+    If limit < 1 Set limit = 5
+    If limit > 25 Set limit = 25
+    Set feat = ##class(PaymentGuard.Vector.Embedder).TxnFeatures(txnId)
+    If feat = "" Quit ..WriteError(404, "transaction not found: "_txnId)
+    Set results = ##class(PaymentGuard.Vector.Embedder).Search(feat, limit, 0.1, txnId)
+    Quit ..WriteJSON({"query_txn_id": (txnId), "results": (results)})
 }
 
 /// Recent decisions with full observability detail

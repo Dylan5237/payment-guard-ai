@@ -26,6 +26,8 @@ Where the official contest bonus criteria live in this project:
 - **ZPM/IPM package (+2)** — shipped as an IPM package (`module.xml`, module name `paymentguard`): classes, REST web apps and the dashboard install with `zpm "install paymentguard"`.
 - **First Developer Community article (+2)** — [PaymentGuard AI: an AI Hub Agent as the Fraud Decision-Maker Inside an IRIS Interoperability Production](https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production).
 - **YouTube video (+3)** — the demo embedded above.
+- **Embedded Python (+3)** — two Python-native components inside the production: the offline-trained logistic risk prior (`ml_model` in the risk context) and the transaction feature hasher that powers vector similarity (see below). Both are `[Language = python]` methods, pure standard library, no pip packages.
+- **Vector Search (+2)** — every transaction is embedded and searchable with IRIS Vector Search (`VECTOR_COSINE`); the agent receives the top similar transactions as evidence and can search them on demand with a tool (see below).
 
 ---
 
@@ -68,13 +70,13 @@ The production item **"PaymentGuard AI Risk Agent"** is the contest's centerpiec
 | Piece | What it does |
 |---|---|
 | `XData INSTRUCTIONS` | Underwriter persona + decision policy + a strict JSON output contract (`action`, `risk_score`, `confidence`, `reasons[]`, `summary`) |
-| `TOOLSETS` | `PaymentGuard.Agent.ToolSet` → 5 read-only tools (`%AI.Tool` methods): customer profile, recent transactions, velocity, device history, merchant profile — all live SQL |
+| `TOOLSETS` | `PaymentGuard.Agent.ToolSet` → 6 read-only tools (`%AI.Tool` methods): customer profile, recent transactions, velocity, device history, merchant profile, semantic similarity search — all live SQL |
 | Provider | Environment-driven: `AI_PROVIDER` (default `deepseek`), `AI_MODEL` (default `deepseek-chat`), `<PROVIDER>_API_KEY`. Any AI Hub provider works (OpenAI, Anthropic, Gemini, Kimi, GLM/Z.ai, Zhipu, Ollama, …) |
 
 ### Decision flow detail
 
 1. **Persist** the payment attempt (`PENDING`)
-2. **Enrich** — customer, 1h/24h velocity, last 5 transactions, device reputation, merchant 30-day stats
+2. **Enrich** — customer, 1h/24h velocity, last 5 transactions, device reputation, merchant 30-day stats, vector-similar historical transactions
 3. **Rules** — blacklist, failed KYC, sanctioned geo, segment caps, velocity spike → `BLOCK`; trusted + small + home + known device → `APPROVE` fast path. Everything in between is the gray zone
 4. **Agent** — gray-zone payments are sent (as `PaymentGuard.Request.AgentDecision`) to the AI Risk Agent operation; the agent may call its tools, then must answer with JSON; the answer is parsed defensively (`Util.JSON.ExtractObject`) and validated (`Util.Validator.ValidDecision`)
 5. **Route** — `APPROVE` → Settlement, `REVIEW` → human review queue (case record), `BLOCK` → fraud alert
@@ -158,6 +160,7 @@ Base: `http://localhost:8082/paymentguard/api`
 | `POST /payments/batch` | `{"count": n}` (≤25) — generates and decides n mixed-pattern demo payments |
 | `POST /claims` | Submit one health-insurance claim settlement (see below) |
 | `GET /transactions?limit=20` | Recent payment attempts |
+| `GET /similar?txn_id=…&limit=5` | Top semantic neighbors of a stored transaction (IRIS Vector Search, cosine similarity) |
 | `GET /decisions?limit=20` | Decision audit trail with reasons, model, tokens, latency |
 | `GET /cases?limit=20` | Human-review cases and fraud alerts |
 | `GET /stats` | Aggregates for the dashboard |
@@ -287,6 +290,37 @@ Wellness Center.
 
 ---
 
+## Semantic similarity — IRIS Vector Search + Embedded Python
+
+Fraud evidence often looks like "this resembles something we have seen
+before". PaymentGuard encodes that instinct with IRIS Vector Search:
+
+- **Embedding** — `PaymentGuard.Vector.Embedder` is an Embedded Python
+  method that hashes the structured transaction features (procedure,
+  diagnosis, provider, city, channel, amount band, currency, …) into a
+  256-dimension L2-normalized vector. Pure standard library: deterministic,
+  offline, no external embedding API — identical inputs always produce the
+  identical vector.
+- **Storage** — every transaction persisted by the production gets its
+  `Embedding` (`VECTOR(double, 256)` column) written after the row is
+  final; seeded history is backfilled the same way.
+- **Retrieval** — `VECTOR_COSINE` top-K queries power two paths:
+  - a `similar_transactions` section in every gray-zone risk context
+    (pre-computed evidence, always in the prompt), and
+  - a `SearchSimilarTransactions` agent tool, so the underwriter agent can
+    pull semantic neighbors on demand mid-reasoning.
+- **Inspection** — `GET /similar?txn_id=…` returns the neighbors with
+  similarity scores.
+
+Example: querying the seeded Shanghai cataract settlement finds the same
+member's Beijing attempt at 0.82 and unrelated MRI claims at 0.31 — the
+duplicate-reimbursement pattern surfaces as a similarity ranking, and the
+agent cites it (`same_procedure_attempted_in_second_city_same_hour`):
+
+```bash
+curl -s "localhost:8082/paymentguard/api/similar?txn_id=claimhist_memb_001_CATARACT_SURGERY_3&limit=3"
+```
+
 ## Observability
 
 - **Message viewer**: every hop — REST entry, decision process, agent operation call,
@@ -309,9 +343,11 @@ IRISAPP>do ##class(PaymentGuard.Tests.Suite).RunAll()
 
 The suite covers the rule engine branches, defensive JSON parsing/validation, an
 end-to-end production run in mock mode (blocked, fast-approved, gray-zone, fraud-pattern
-and audit-trail cases), and the healthcare claims scenario (endpoint mapping, the
+and audit-trail cases), the healthcare claims scenario (endpoint mapping, the
 duplicate cross-city rule, the provider blacklist and the agent-correlated claim
-flow) — it runs offline, no API key needed.
+flow), and the vector search layer (embedding determinism, seeded-claim retrieval,
+context injection, self-exclusion, end-to-end embedding) — it runs offline, no
+API key needed.
 
 ## Project structure
 
@@ -324,6 +360,7 @@ flow) — it runs offline, no API key needed.
 │   ├── Interop/     Production, DecisionBP, AgentOperation, Settle/Review/Alert BOs
 │   ├── REST/        Dispatch (%CSP.REST), BS (EnsLib.REST.Service)
 │   ├── Rules/       RuleEngine, Mocker (deterministic offline engine)
+│   ├── Vector/      Embedder — Embedded Python feature hasher + cosine search
 │   ├── Data/        Customer, Transaction, Decision, CaseRecord, Enricher, Populate
 │   ├── Request/ Response/ Msg/    interoperability messages
 │   ├── Util/        Config, JSON, Validator, Setup

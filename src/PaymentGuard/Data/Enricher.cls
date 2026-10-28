@@ -8,7 +8,9 @@ Class PaymentGuard.Data.Enricher
 
 /// Build the enrichment context for a payment request.
 /// pCust may be "" (unknown customer) — the context then reflects that fact.
-ClassMethod BuildContext(pReq As PaymentGuard.Request.Payment, pCust As PaymentGuard.Data.Customer) As %DynamicObject
+/// pTxnId (stored id of the persisted attempt) is excluded from the vector
+/// similarity search so the transaction never matches itself.
+ClassMethod BuildContext(pReq As PaymentGuard.Request.Payment, pCust As PaymentGuard.Data.Customer, pTxnId As %String = "") As %DynamicObject
 {
     Set ctx = {}
     Do ctx.%Set("customer", ..CustomerObject(pCust, pReq.CustomerId))
@@ -17,6 +19,7 @@ ClassMethod BuildContext(pReq As PaymentGuard.Request.Payment, pCust As PaymentG
     Do ctx.%Set("recent_transactions", ..RecentTransactions(pReq.CustomerId, 5))
     Do ctx.%Set("device", ..DeviceHistory(pReq.DeviceId))
     Do ctx.%Set("merchant", ..MerchantProfile(pReq.Merchant))
+    Do ctx.%Set("similar_transactions", ##class(PaymentGuard.Vector.Embedder).Search(##class(PaymentGuard.Vector.Embedder).RequestFeatures(pReq), 5, 0.35, pTxnId))
     Quit ctx
 }
 

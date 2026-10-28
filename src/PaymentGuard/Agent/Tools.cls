@@ -119,4 +119,22 @@ Method GetMerchantProfile(Merchant As %String) As %DynamicObject
     Quit o
 }
 
+/// Semantic nearest neighbors of a transaction: IRIS Vector Search (cosine)
+/// over 256-dimension feature embeddings computed by Embedded Python. Pass
+/// the current transaction id to see which historical payments or claims
+/// resemble it — the same procedure, provider, city or amount band ranks
+/// highest. Use it to correlate a claim with near-identical settlements or
+/// to check whether a payment matches a known fraud pattern.
+Method SearchSimilarTransactions(TxnId As %String, TopN As %Integer = 5) As %DynamicObject
+{
+    Set o = {"query_txn_id": (TxnId), "results": []}
+    Set feat = ##class(PaymentGuard.Vector.Embedder).TxnFeatures(TxnId)
+    If feat = "" {
+        Do o.%Set("note", "Transaction "_TxnId_" is not known to the platform")
+        Quit o
+    }
+    Do o.%Set("results", ##class(PaymentGuard.Vector.Embedder).Search(feat, TopN, 0.35, TxnId))
+    Quit o
+}
+
 }

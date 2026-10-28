@@ -56,7 +56,7 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
 
     // ── 2. Enrich ─────────────────────────────────────────────
     Set cust = ##class(PaymentGuard.Data.Customer).OpenByCustomerId(pRequest.CustomerId)
-    Set ctx = ##class(PaymentGuard.Data.Enricher).BuildContext(pRequest, cust)
+    Set ctx = ##class(PaymentGuard.Data.Enricher).BuildContext(pRequest, cust, txnId)
     Do ctx.%Set("payment", ..PaymentJSON(pRequest, txnId))
     // Offline-trained logistic prior computed by Embedded Python: an advisory
     // signal for the agent. If Python is unavailable the flow continues without it.
@@ -172,6 +172,17 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
     Set txn.Status = $Select(action = "APPROVE": "SETTLED", action = "REVIEW": "REVIEW", 1: "BLOCKED")
     If $$$ISOK(recSC) Set txn.DecisionId = rec.%Id()
     Do txn.%Save()
+
+    // Vector-embed the attempt now that the row is final — the object was
+    // saved twice and a second object save would clobber a SQL-written
+    // vector, so the embedding is stored only after the last save. Embedded
+    // Python, best effort: the decision flow never depends on it.
+    Try {
+        Set embSC = ##class(PaymentGuard.Vector.Embedder).EmbedAndStore(txnId)
+        If $$$ISERR(embSC) Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Embedding unavailable for txn="_txnId_": "_$System.Status.GetErrorText(embSC))
+    } Catch ex {
+        Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Embedded Python embedding unavailable: "_ex.DisplayString())
+    }
 
     // ── 7. Respond ────────────────────────────────────────────
     Set pResponse.TxnId = txnId

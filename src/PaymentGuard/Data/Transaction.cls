@@ -42,6 +42,10 @@ Property Status As %String(VALUELIST = ",PENDING,SETTLED,REVIEW,BLOCKED") [ Init
 /// Id of the PaymentGuard.Data.Decision audit row that resolved this transaction
 Property DecisionId As %String(MAXLEN = 64);
 
+/// 256-dim feature embedding (PaymentGuard.Vector.Embedder) for IRIS Vector
+/// Search similarity. NULL until the row is embedded.
+Property Embedding As %Vector(LEN = 256, DATATYPE = "double");
+
 Index TxnIdIdx On TxnId [ Unique ];
 Index CustTimeIdx On (CustomerId, TxnTime);
 Index DeviceIdx On DeviceId;

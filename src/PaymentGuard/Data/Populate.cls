@@ -67,6 +67,14 @@ ClassMethod Seed(pForce As %Boolean = 0) As %Status
     }
     If $$$ISERR(tSC) Quit tSC
     Set tSC = ..ClaimTxn("memb_004", "Sunrise Wellness Center", "PHYSICAL_EXAM", "Z00.0", 980, "Shenzhen", 15)
+    If $$$ISERR(tSC) Quit tSC
+
+    // Vector-embed the seeded history for IRIS Vector Search (best effort —
+    // Backfill skips rows that already have an embedding)
+    Try {
+        Do ##class(PaymentGuard.Vector.Embedder).Backfill()
+    } Catch ex {
+    }
 
     Quit tSC
 }
