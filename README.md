@@ -18,6 +18,15 @@ Built for the **InterSystems Programming Contest: AI Agent in Interoperability W
 
 A 3-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.
 
+## Technology bonuses
+
+Where the official contest bonus criteria live in this project:
+
+- **Docker container (+2)** — the entire stack is containerized: `docker compose up -d --build` starts IRIS (AI Hub EAP community image) plus a Web Gateway sidecar.
+- **ZPM/IPM package (+2)** — shipped as an IPM package (`module.xml`, module name `paymentguard`): classes, REST web apps and the dashboard install with `zpm "install paymentguard"`.
+- **First Developer Community article (+2)** — [PaymentGuard AI: an AI Hub Agent as the Fraud Decision-Maker Inside an IRIS Interoperability Production](https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production).
+- **YouTube video (+3)** — the demo embedded above.
+
 ---
 
 ## Architecture
