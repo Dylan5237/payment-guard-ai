@@ -14,9 +14,9 @@ Built for the **InterSystems Programming Contest: AI Agent in Interoperability W
 
 ## Demo
 
-[![PaymentGuard AI — demo video](docs/logo.png)](https://www.youtube.com/watch?v=SupCMUowSjc)
+[![PaymentGuard AI — demo video](docs/logo.png)](https://www.youtube.com/watch?v=ZcotKFBElKM)
 
-A 3-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.
+A 4-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, the healthcare claims scenario (cross-city duplicate reimbursement, agent-correlated claims, blacklisted provider), a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.
 
 ## Technology bonuses
 
