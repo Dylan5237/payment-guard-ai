@@ -18,16 +18,14 @@ Built for the **InterSystems Programming Contest: AI Agent in Interoperability W
 
 A 4-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, the healthcare claims scenario (cross-city duplicate reimbursement, agent-correlated claims, blacklisted provider), a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.
 
-## Technology bonuses
+## Deployment and distribution
 
-Where the official contest bonus criteria live in this project:
-
-- **Docker container (+2)** — the entire stack is containerized: `docker compose up -d --build` starts IRIS (AI Hub EAP community image) plus a Web Gateway sidecar.
-- **ZPM/IPM package (+2)** — shipped as an IPM package (`module.xml`, module name `paymentguard`): classes, REST web apps and the dashboard install with `zpm "install paymentguard"`.
-- **First Developer Community article (+2)** — [PaymentGuard AI: an AI Hub Agent as the Fraud Decision-Maker Inside an IRIS Interoperability Production](https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production).
-- **YouTube video (+3)** — the demo embedded above.
-- **Embedded Python (+3)** — two Python-native components inside the production: the offline-trained logistic risk prior (`ml_model` in the risk context) and the transaction feature hasher that powers vector similarity (see below). Both are `[Language = python]` methods, pure standard library, no pip packages.
-- **Vector Search (+2)** — every transaction is embedded and searchable with IRIS Vector Search (`VECTOR_COSINE`); the agent receives the top similar transactions as evidence and can search them on demand with a tool (see below).
+- **One command, fully containerized** — `docker compose up -d --build` starts IRIS (AI Hub EAP community image) plus the Web Gateway sidecar (see Quick start).
+- **Online demo** — [http://43.139.159.100:8082/paymentguard/](http://43.139.159.100:8082/paymentguard/): the live dashboard, the REST API at `/paymentguard/api` and the production behind it, deciding in live DeepSeek mode. Management Portal: http://43.139.159.100:8082/csp/sys/UtilHome.csp (`SuperUser` / `SYS`).
+- **IPM package** — module `paymentguard`: `zpm "install paymentguard"` installs classes, REST web apps and the dashboard.
+- **Embedded Python inside** — two Python-native components in the decision path: the offline-trained logistic risk prior (`ml_model` in the risk context) and the transaction feature hasher behind vector similarity (see below). Both are `[Language = python]` methods, pure standard library, no pip packages.
+- **No API key? Mock mode** — the stack runs end-to-end offline: a deterministic engine answers in the same JSON contract, and the whole %UnitTest suite (30 tests) is green without any key.
+- **Sources & media** — this repository, the [demo video](https://youtu.be/ZcotKFBElKM), the [Developer Community article](https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production) and Open Exchange (*PaymentGuard-AI*).
 
 ---
 
