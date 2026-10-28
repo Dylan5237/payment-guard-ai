@@ -56,6 +56,32 @@ A 12-payment demo burst produced exactly the split you'd want — 7 APPROVE (2 b
 
 The first decision is the interesting one: the agent **correlated three separate payments inside the same burst** (via its velocity tool) and named the fraud pattern. Every decision row carries prompt/completion tokens, tool-call count, latency, model and the persisted AI Hub session id — any decision can be replayed with `##class(%AI.Agent.Session).%OpenId(<id>)`. In the demo run the agent spent ~3,000 prompt + ~350 completion tokens and ~2–3 s per gray-zone decision; the fast-path and rule decisions cost zero.
 
+## Healthcare claims: the same engine, one more fraud domain
+
+Health-insurance claim settlement is just a payment with extra vocabulary: the *member* is the customer, the *provider* is the merchant, and the claim carries `procedure`, `diagnosis` and `city`. Those fields ride the entire pipeline unchanged — rules, enrichment, agent context, audit trail — so the production learns a second fraud domain through a purely additive change. Two deterministic claim rules extend the rule engine: the same member settling the **same procedure in another city** within 7 days of a settled claim blocks instantly (`DUPLICATE_CROSS_CITY_CLAIM`), and providers reuse the merchant blacklist (`BLACKLISTED_MERCHANT`). The agent's instructions map the claim vocabulary and the duplicate-reimbursement pattern, so gray-zone claims get correlated against the member's settlement history.
+
+The demo scenario: member `memb_001` settled a full-price cataract surgery (CNY 12,800) at Shanghai Renji Hospital 3 days ago. Three claims via `POST /api/claims`, three mechanisms.
+
+The same surgery filed in Beijing — the rule engine answers in milliseconds, zero tokens:
+
+```
+curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Beijing Union Medical College Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Beijing","currency":"CNY"}'
+```
+
+> **BLOCK · RULES** — `DUPLICATE_CROSS_CITY_CLAIM` — "Insured member settled procedure CATARACT_SURGERY in Shanghai within the last 7 days (prior claim claimhist_memb_001_CATARACT_SURGERY_3 on 2026-10-25) - duplicate cross-city reimbursement"
+
+The same surgery back in Shanghai — same city, so the rule doesn't fire. The gray zone goes to the agent, which correlates the settled surgery with today's blocked Beijing attempt:
+
+```
+curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Shanghai Renji Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Shanghai","currency":"CNY"}'
+```
+
+> **BLOCK · AGENT (deepseek-chat)**, risk 92, confidence 0.9 — reasons `duplicate_reimbursement`, `same_procedure_multiple_cities`, `same_procedure_settled_3_days_ago`, `prior_attempt_blocked_today`, `amount_matches_duplicate_exactly` — "Member Zhang Wei already has CATARACT_SURGERY (H25.9) settled at Shanghai Renji Hospital on 2026-10-25 for CNY 12,800; a further identical claim was attempted at Beijing Union Medical College Hospital today and blocked, and now the same procedure/amount is presented again in Shanghai. This is a duplicate reimbursement attempt across providers/cities and should be declined and escalated." — 1,985 prompt + 154 completion tokens, 1.8 s.
+
+And a claim from a blacklisted provider never reaches the LLM: `BLACKLISTED_MERCHANT`, instant block, zero tokens. The seed data ships four members, four hospitals and dialysis / surgery / imaging history, and the %UnitTest suite grew to 24 — claim endpoint mapping, the cross-city duplicate rule, the provider blacklist, and the agent-correlated claim flow.
+
 ## The NoPWS surprise (or: how to serve anything from these builds)
 
 The 2026.3 AI Hub EAP builds are **NoPWS** — the private web server on port 52773 is disabled entirely; no portal, no REST, nothing HTTP from the IRIS container. PaymentGuard therefore ships a standard InterSystems **Web Gateway sidecar** (`containers.intersystems.com/intersystems/webgateway`) and documents the three things that made it work:
@@ -83,7 +109,7 @@ curl -s -X POST localhost:8082/paymentguard/api/payments -H "Content-Type: appli
   -d '{"customer_id":"cust_ret_003","amount":430,"geo_country":"SG","device_id":"dev_new_9","merchant":"GadgetWorld"}'
 ```
 
-No API key? The stack runs end-to-end in **mock mode** — a deterministic engine answers in the same JSON contract, so the flow, dashboard, audit trail and the whole %UnitTest suite work offline (`do ##class(PaymentGuard.Tests.Suite).RunAll()` — 18 tests, green).
+No API key? The stack runs end-to-end in **mock mode** — a deterministic engine answers in the same JSON contract, so the flow, dashboard, audit trail and the whole %UnitTest suite work offline (`do ##class(PaymentGuard.Tests.Suite).RunAll()` — 24 tests, green).
 
 ## What we'd build next
 
