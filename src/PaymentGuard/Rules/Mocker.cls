@@ -41,6 +41,25 @@ ClassMethod DecideJSON(pContextJSON As %String) As %String
         Set v24 = ctx.%Get("velocity_24h")
         If $IsObject(v24), v24.%Get("total_usd") > 20000 { Set score = score + 20 Do reasons.%Push("daily_volume_exceeded") }
 
+        // Healthcare claim: correlate with the member's claim history - a
+        // prior settled claim for the same procedure, or the same procedure
+        // already attempted in another city, is duplicate reimbursement
+        If $IsObject(txn), txn.%Get("procedure") '= "" {
+            Set score = score + 10 Do reasons.%Push("healthcare_claim")
+            Set recents = ctx.%Get("recent_transactions")
+            If $IsObject(recents) {
+                For i = 0:1:recents.%Size - 1 {
+                    Set r = recents.%Get(i)
+                    If '$IsObject(r) Continue
+                    If r.%Get("procedure") '= txn.%Get("procedure") Continue
+                    If (r.%Get("status") = "SETTLED") || (r.%Get("city") '= "" && r.%Get("city") '= txn.%Get("city")) {
+                        Set score = score + 70 Do reasons.%Push("duplicate_reimbursement")
+                        Quit
+                    }
+                }
+            }
+        }
+
         If score > 100 Set score = 100
         Do o.%Set("risk_score", score)
         Set action = $Select(score >= 80: "BLOCK", score >= 45: "REVIEW", 1: "APPROVE")

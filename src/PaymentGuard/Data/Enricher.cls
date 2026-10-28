@@ -79,7 +79,7 @@ ClassMethod RecentTransactions(pCustomerId As %String, pLimit As %Integer) As %D
     Set arr = []
     If pCustomerId = "" Quit arr
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP ? Amount, Currency, Merchant, MerchantCategory, GeoCountry, Channel, TxnTime, Status FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? ORDER BY TxnTime DESC")
+    Set tSC = tStmt.%Prepare("SELECT TOP ? Amount, Currency, Merchant, MerchantCategory, GeoCountry, Channel, TxnTime, Status, ""Procedure"", Diagnosis, City FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? ORDER BY TxnTime DESC")
     If $$$ISERR(tSC) Quit arr
     Set tRS = tStmt.%Execute(pLimit, pCustomerId)
     While tRS.%Next() {
@@ -92,6 +92,11 @@ ClassMethod RecentTransactions(pCustomerId As %String, pLimit As %Integer) As %D
         Do row.%Set("channel", tRS.%Get("Channel"))
         Do row.%Set("time", tRS.%Get("TxnTime"))
         Do row.%Set("status", tRS.%Get("Status"))
+        If tRS.%Get("Procedure") '= "" {
+            Do row.%Set("procedure", tRS.%Get("Procedure"))
+            Do row.%Set("diagnosis", tRS.%Get("Diagnosis"))
+            Do row.%Set("city", tRS.%Get("City"))
+        }
         Do arr.%Push(row)
     }
     Quit arr

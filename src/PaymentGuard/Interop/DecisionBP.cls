@@ -46,6 +46,9 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
     Set txn.Channel = pRequest.Channel
     Set txn.GeoCountry = pRequest.GeoCountry
     Set txn.DeviceId = pRequest.DeviceId
+    Set txn.Procedure = pRequest.Procedure
+    Set txn.Diagnosis = pRequest.Diagnosis
+    Set txn.City = pRequest.City
     Set txn.TxnTime = ..ParseTime(pRequest.TxnTime)
     Set tSC = txn.%Save()
     If $$$ISERR(tSC) Quit tSC
@@ -192,6 +195,9 @@ ClassMethod PaymentJSON(pReq As PaymentGuard.Request.Payment, pTxnId As %String)
     Do o.%Set("channel", pReq.Channel)
     Do o.%Set("geo_country", pReq.GeoCountry)
     Do o.%Set("device_id", pReq.DeviceId)
+    Do o.%Set("procedure", pReq.Procedure)
+    Do o.%Set("diagnosis", pReq.Diagnosis)
+    Do o.%Set("city", pReq.City)
     Quit o
 }
 

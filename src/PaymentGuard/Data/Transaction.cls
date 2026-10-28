@@ -25,6 +25,15 @@ Property GeoCountry As %String(MAXLEN = 2);
 
 Property DeviceId As %String(MAXLEN = 64);
 
+/// Healthcare claims: treatment procedure code
+Property Procedure As %String(MAXLEN = 64);
+
+/// Healthcare claims: ICD-10 diagnosis code
+Property Diagnosis As %String(MAXLEN = 16);
+
+/// Healthcare claims: city of the settlement
+Property City As %String(MAXLEN = 64);
+
 Property TxnTime As %TimeStamp;
 
 /// PENDING | SETTLED | REVIEW | BLOCKED

@@ -156,6 +156,7 @@ Base: `http://localhost:8082/paymentguard/api`
 | `GET /health` | Production status, provider/model, live-vs-mock mode |
 | `POST /payments` | Authorize one payment (body below) → full decision incl. tokens & latency |
 | `POST /payments/batch` | `{"count": n}` (≤25) — generates and decides n mixed-pattern demo payments |
+| `POST /claims` | Submit one health-insurance claim settlement (see below) |
 | `GET /transactions?limit=20` | Recent payment attempts |
 | `GET /decisions?limit=20` | Decision audit trail with reasons, model, tokens, latency |
 | `GET /cases?limit=20` | Human-review cases and fraud alerts |
@@ -202,6 +203,90 @@ KYC-pending), `cust_sme_001/002` (business), `cust_risk_001` (high-risk), `cust_
 
 ---
 
+## Healthcare claims scenario
+
+The same production also decides **health-insurance claim settlements**. A claim
+is simply a payment that carries a `procedure`: the endpoint vocabulary maps onto
+insurance vocabulary — `member_id` (the insured member) becomes the customer,
+`provider` (the hospital/clinic) becomes the merchant, and `procedure` /
+`diagnosis` / `city` ride along through the entire pipeline — deterministic
+rules, enrichment, agent context and the audit trail — unchanged.
+
+Two deterministic claim rules extend the rule engine:
+
+- **Duplicate cross-city claim** — the same member settling the *same procedure*
+  in *another city* within 7 days of an already-settled claim → instant
+  `BLOCK` (`DUPLICATE_CROSS_CITY_CLAIM`).
+- **Provider blacklist** — providers reuse the merchant blacklist mechanism →
+  instant `BLOCK` (`BLACKLISTED_MERCHANT`).
+
+Everything else flows to the AI agent, whose instructions include the claim
+vocabulary and the duplicate-reimbursement pattern, so it correlates a claim
+against the member's settlement history on its own.
+
+### Demo: duplicate reimbursement, three shots, three mechanisms
+
+Seed data: member `memb_001` (Zhang Wei) settled a full-price cataract surgery
+(CNY 12,800) at Shanghai Renji Hospital 3 days ago.
+
+**Shot 1** — the same surgery filed in Beijing: the rule engine blocks instantly.
+
+```bash
+curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Beijing Union Medical College Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Beijing","currency":"CNY"}'
+```
+
+```json
+{"txn_id":"txn_6787132142_141860","action":"BLOCK","source":"RULES","risk_score":90,"confidence":1,
+ "reasons":["DUPLICATE_CROSS_CITY_CLAIM"],
+ "summary":"Insured member settled procedure CATARACT_SURGERY in Shanghai within the last 7 days (prior claim claimhist_memb_001_CATARACT_SURGERY_3 on 2026-10-25 00:00:00) - duplicate cross-city reimbursement",
+ "model":"","session_id":"","prompt_tokens":0,"completion_tokens":0,"latency_ms":0,"decision_id":"7"}
+```
+
+**Shot 2** — the same surgery back in Shanghai (same city, so the rule passes):
+the gray-zone claim reaches the AI agent, which correlates it with the member's
+history — the Shanghai settlement, the Beijing block — and declines with a
+reason a human adjuster can read:
+
+```bash
+curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Shanghai Renji Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Shanghai","currency":"CNY"}'
+```
+
+```json
+{"txn_id":"txn_6787132181_575310","action":"BLOCK","source":"AGENT","risk_score":92,"confidence":0.9,
+ "reasons":["duplicate_reimbursement","same_procedure_multiple_cities","same_procedure_settled_3_days_ago","prior_attempt_blocked_today","amount_matches_duplicate_exactly"],
+ "summary":"Member Zhang Wei already has CATARACT_SURGERY (H25.9) settled at Shanghai Renji Hospital on 2026-10-25 for CNY 12,800; a further identical claim was attempted at Beijing Union Medical College Hospital today and blocked, and now the same procedure/amount is presented again in Shanghai. This is a duplicate reimbursement attempt across providers/cities and should be declined and escalated.",
+ "model":"deepseek-chat","session_id":"1","prompt_tokens":1985,"completion_tokens":154,"latency_ms":1834,"decision_id":"8"}
+```
+
+**Shot 3** — a claim from a blacklisted provider: instant block, no LLM involved.
+
+```bash
+curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_002","provider":"Sunrise Wellness Center","procedure":"PHYSICAL_EXAM","diagnosis":"Z00.0","amount":980,"city":"Shenzhen"}'
+```
+
+```json
+{"txn_id":"txn_6787132196_629126","action":"BLOCK","source":"RULES","risk_score":90,"confidence":1,
+ "reasons":["BLACKLISTED_MERCHANT"],
+ "summary":"Merchant/provider Sunrise Wellness Center is on the platform blacklist",
+ "model":"","session_id":"","prompt_tokens":0,"completion_tokens":0,"latency_ms":0,"decision_id":"9"}
+```
+
+`POST /api/claims` body: `member_id` and `amount` are required; `provider`,
+`procedure`, `diagnosis`, `city`, `currency` (defaults to CNY), `claim_time` and
+`geo_country` (defaults to CN) are optional.
+
+Seeded demo members: `memb_001` (premium plan, the demo trigger above),
+`memb_002` (premium), `memb_003` (retail, dialysis patient with a 3-week
+hemodialysis history in Guangzhou), `memb_004` (business plan) — plus settled
+claim history at Shanghai Renji Hospital, Beijing Union Medical College
+Hospital, Guangzhou First People's Hospital and the blacklisted Sunrise
+Wellness Center.
+
+---
+
 ## Observability
 
 - **Message viewer**: every hop — REST entry, decision process, agent operation call,
@@ -222,9 +307,11 @@ docker compose exec iris iris session iris -U IRISAPP
 IRISAPP>do ##class(PaymentGuard.Tests.Suite).RunAll()
 ```
 
-The suite covers the rule engine branches, defensive JSON parsing/validation, and an
+The suite covers the rule engine branches, defensive JSON parsing/validation, an
 end-to-end production run in mock mode (blocked, fast-approved, gray-zone, fraud-pattern
-and audit-trail cases) — it runs offline, no API key needed.
+and audit-trail cases), and the healthcare claims scenario (endpoint mapping, the
+duplicate cross-city rule, the provider blacklist and the agent-correlated claim
+flow) — it runs offline, no API key needed.
 
 ## Project structure
 

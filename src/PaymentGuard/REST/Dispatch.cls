@@ -21,6 +21,7 @@ XData UrlMap
   <Route Url="/health" Method="GET" Call="Health"/>
   <Route Url="/payments" Method="POST" Call="CreatePayment"/>
   <Route Url="/payments/batch" Method="POST" Call="BatchPayments"/>
+  <Route Url="/claims" Method="POST" Call="CreateClaim"/>
   <Route Url="/transactions" Method="GET" Call="ListTransactions"/>
   <Route Url="/decisions" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases" Method="GET" Call="ListCases"/>
@@ -32,6 +33,7 @@ XData UrlMap
   <Route Url="/health.csp" Method="GET" Call="Health"/>
   <Route Url="/payments.csp" Method="POST" Call="CreatePayment"/>
   <Route Url="/payments/batch.csp" Method="POST" Call="BatchPayments"/>
+  <Route Url="/claims.csp" Method="POST" Call="CreateClaim"/>
   <Route Url="/transactions.csp" Method="GET" Call="ListTransactions"/>
   <Route Url="/decisions.csp" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases.csp" Method="GET" Call="ListCases"/>
@@ -132,6 +134,41 @@ ClassMethod CreatePayment() As %Status
     Set req.DeviceId = body.%Get("device_id")
     Set req.TxnTime = body.%Get("txn_time")
 
+    If '..SubmitPayment(req, .resp, .sc) {
+        Quit ..WriteError(503, "Production call failed - is the PaymentGuard production running? "_$System.Status.GetErrorText(sc))
+    }
+    Quit ..WriteJSON(resp.ToAPIJSON(), 201)
+}
+
+/// Map a health-insurance claim body onto the standard payment request:
+/// member -> customer, provider -> merchant, plus procedure/diagnosis/city.
+/// The claim then flows through the exact same decision and audit pipeline.
+ClassMethod ClaimToPayment(pBody As %DynamicObject) As PaymentGuard.Request.Payment
+{
+    Set req = ##class(PaymentGuard.Request.Payment).%New()
+    Set req.TxnId = pBody.%Get("claim_id")
+    Set req.CustomerId = pBody.%Get("member_id")
+    Set req.Amount = +pBody.%Get("amount")
+    Set req.Currency = $Select(pBody.%Get("currency") '="": pBody.%Get("currency"), 1: "CNY")
+    Set req.Merchant = pBody.%Get("provider")
+    Set req.MerchantCategory = "HEALTHCARE"
+    Set req.Procedure = pBody.%Get("procedure")
+    Set req.Diagnosis = pBody.%Get("diagnosis")
+    Set req.City = pBody.%Get("city")
+    Set req.GeoCountry = $Select(pBody.%Get("geo_country") '="": pBody.%Get("geo_country"), 1: "CN")
+    Set req.TxnTime = pBody.%Get("claim_time")
+    Quit req
+}
+
+/// Submit one health-insurance claim settlement for a decision
+ClassMethod CreateClaim() As %Status
+{
+    Set body = ..ReadBody()
+    If '$IsObject(body) Quit ..WriteError(400, "Invalid or missing JSON body")
+    If body.%Get("member_id") = "" Quit ..WriteError(400, "member_id is required")
+    If (+body.%Get("amount")) <= 0 Quit ..WriteError(400, "amount must be a positive number")
+
+    Set req = ..ClaimToPayment(body)
     If '..SubmitPayment(req, .resp, .sc) {
         Quit ..WriteError(503, "Production call failed - is the PaymentGuard production running? "_$System.Status.GetErrorText(sc))
     }

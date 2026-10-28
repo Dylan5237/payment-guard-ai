@@ -29,4 +29,14 @@ Property DeviceId As %String(MAXLEN = 64);
 /// ISO timestamp supplied by the caller; defaults to now
 Property TxnTime As %String(MAXLEN = 40);
 
+/// Healthcare claims only: treatment procedure code (e.g. CATARACT_SURGERY).
+/// Present => the payment is a health-insurance claim settlement.
+Property Procedure As %String(MAXLEN = 64);
+
+/// Healthcare claims only: ICD-10 diagnosis code (e.g. H25.9)
+Property Diagnosis As %String(MAXLEN = 16);
+
+/// Healthcare claims only: city where the settlement took place
+Property City As %String(MAXLEN = 64);
+
 }

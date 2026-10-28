@@ -44,6 +44,30 @@ ClassMethod Seed(pForce As %Boolean = 0) As %Status
     If $$$ISERR(tSC) Quit tSC
     Set tSC = ..History("cust_risk_001", "dev_risk_001", "RU", 5, 30, 300, "Steam", "FastElectronics")
 
+    // ── Healthcare scenario: insured members + claim history ──
+    // VIP/SME members so realistic surgery amounts stay under segment caps
+    Do ..Customer("memb_001", "Zhang Wei", "VIP", "CN", "LOW", "VERIFIED", 0, 1800, 16000, 88, "dev_memb_001")
+    Do ..Customer("memb_002", "Li Na", "VIP", "CN", "LOW", "VERIFIED", 0, 1300, 13000, 84, "dev_memb_002")
+    Do ..Customer("memb_003", "Wang Fang", "RETAIL", "CN", "MEDIUM", "PENDING", 0, 600, 900, 58, "dev_memb_003")
+    Do ..Customer("memb_004", "Chen Jing", "SME", "CN", "LOW", "VERIFIED", 0, 900, 20000, 76, "dev_memb_004")
+
+    // Demo trigger: memb_001 settled a full-price cataract surgery in
+    // Shanghai 3 days ago - a second settlement elsewhere is a duplicate
+    Set tSC = ..ClaimTxn("memb_001", "Shanghai Renji Hospital", "CATARACT_SURGERY", "H25.9", 12800, "Shanghai", 3)
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..ClaimTxn("memb_001", "Shanghai Renji Hospital", "MRI_BRAIN", "R51", 2100, "Shanghai", 10)
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..ClaimTxn("memb_002", "Beijing Union Medical College Hospital", "HEMODIALYSIS", "N18.5", 820, "Beijing", 9)
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..ClaimTxn("memb_002", "Beijing Union Medical College Hospital", "HEMODIALYSIS", "N18.5", 820, "Beijing", 12)
+    If $$$ISERR(tSC) Quit tSC
+    For days = 8,11,14,17,20,23 {
+        Set tSC = ..ClaimTxn("memb_003", "Guangzhou First People's Hospital", "HEMODIALYSIS", "N18.5", 780, "Guangzhou", days)
+        If $$$ISERR(tSC) Quit
+    }
+    If $$$ISERR(tSC) Quit tSC
+    Set tSC = ..ClaimTxn("memb_004", "Sunrise Wellness Center", "PHYSICAL_EXAM", "Z00.0", 980, "Shenzhen", 15)
+
     Quit tSC
 }
 
@@ -87,6 +111,25 @@ ClassMethod SaveHistoryTxn(pCustomerId As %String, pDeviceId As %String, pCountr
     Set t.GeoCountry = pCountry
     Set t.DeviceId = pDeviceId
     Set t.TxnTime = $ZDATETIME($HOROLOG - $RANDOM(29), 3, 1)
+    Set t.Status = "SETTLED"
+    Quit t.%Save()
+}
+
+/// One settled health-insurance claim in a member's history
+ClassMethod ClaimTxn(pMember As %String, pProvider As %String, pProcedure As %String, pDiagnosis As %String, pAmount As %Numeric, pCity As %String, pDaysAgo As %Integer) As %Status
+{
+    Set t = ##class(PaymentGuard.Data.Transaction).%New()
+    Set t.TxnId = "claimhist_"_pMember_"_"_pProcedure_"_"_pDaysAgo
+    Set t.CustomerId = pMember
+    Set t.Amount = pAmount
+    Set t.Currency = "CNY"
+    Set t.Merchant = pProvider
+    Set t.MerchantCategory = "HEALTHCARE"
+    Set t.GeoCountry = "CN"
+    Set t.Procedure = pProcedure
+    Set t.Diagnosis = pDiagnosis
+    Set t.City = pCity
+    Set t.TxnTime = $ZDATETIME($HOROLOG - pDaysAgo, 3, 1)
     Set t.Status = "SETTLED"
     Quit t.%Save()
 }

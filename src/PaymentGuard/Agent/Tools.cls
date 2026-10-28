@@ -31,13 +31,15 @@ Method GetCustomerProfile(CustomerId As %String) As %DynamicObject
 }
 
 /// Recent payment attempts of a customer, newest first. Use to compare the
-/// current payment against established behavior.
+/// current payment against established behavior. For health-insurance claims
+/// the rows also carry procedure, diagnosis and settlement city — use them to
+/// spot the same member settling the same procedure in several cities.
 Method GetRecentTransactions(CustomerId As %String, Days As %Integer) As %DynamicArray
 {
     Set arr = []
     Set cutoff = ##class(PaymentGuard.Data.Enricher).HoursAgo(Days * 24)
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP 10 Amount, Currency, Merchant, GeoCountry, Channel, TxnTime, Status FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? AND TxnTime > ? ORDER BY TxnTime DESC")
+    Set tSC = tStmt.%Prepare("SELECT TOP 10 Amount, Currency, Merchant, GeoCountry, Channel, TxnTime, Status, ""Procedure"", Diagnosis, City FROM PaymentGuard_Data.""Transaction"" WHERE CustomerId = ? AND TxnTime > ? ORDER BY TxnTime DESC")
     If $$$ISERR(tSC) Quit arr
     Set tRS = tStmt.%Execute(CustomerId, cutoff)
     While tRS.%Next() {
@@ -49,6 +51,11 @@ Method GetRecentTransactions(CustomerId As %String, Days As %Integer) As %Dynami
         Do row.%Set("channel", tRS.%Get("Channel"))
         Do row.%Set("time", tRS.%Get("TxnTime"))
         Do row.%Set("status", tRS.%Get("Status"))
+        If tRS.%Get("Procedure") '= "" {
+            Do row.%Set("procedure", tRS.%Get("Procedure"))
+            Do row.%Set("diagnosis", tRS.%Get("Diagnosis"))
+            Do row.%Set("city", tRS.%Get("City"))
+        }
         Do arr.%Push(row)
     }
     Quit arr
