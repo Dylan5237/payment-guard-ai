@@ -58,6 +58,14 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
     Set cust = ##class(PaymentGuard.Data.Customer).OpenByCustomerId(pRequest.CustomerId)
     Set ctx = ##class(PaymentGuard.Data.Enricher).BuildContext(pRequest, cust)
     Do ctx.%Set("payment", ..PaymentJSON(pRequest, txnId))
+    // Offline-trained logistic prior computed by Embedded Python: an advisory
+    // signal for the agent. If Python is unavailable the flow continues without it.
+    Try {
+        Set ml = ##class(PaymentGuard.Rules.PyModel).Score(ctx.%ToJSON())
+        If $IsObject(ml) Do ctx.%Set("ml_model", ml)
+    } Catch ex {
+        Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Embedded Python model unavailable: "_ex.DisplayString())
+    }
 
     // ── 3. Deterministic rules ────────────────────────────────
     Set ruleName = "", ruleReason = ""

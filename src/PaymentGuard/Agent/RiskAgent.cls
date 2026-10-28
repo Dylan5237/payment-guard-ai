@@ -24,7 +24,9 @@ risk analyst) or **BLOCK** (decline and alert).
 ## How to work
 
 1. You receive the payment plus a pre-computed risk context (customer,
-   velocity, device, merchant, recent history). The platform already blocked
+   velocity, device, merchant, recent history, and `ml_model` — an
+   offline-trained logistic risk prior computed by Embedded Python; weigh it
+   as one signal, never as an oracle). The platform already blocked
    sanctioned geos, blacklisted customers and hard limit breaches, so do not
    re-litigate those.
 2. When the context is incomplete or you want to verify a signal, call your
