@@ -20,7 +20,7 @@ PaymentGuard AI 做的事就这么直接：把一个真实的 IRIS AI Hub Agent�
 
 ## 演示视频
 
-<https://youtu.be/ZcotKFBElKM>
+<https://youtu.be/gk_4e_GpJN0>
 
 四分钟看完全流程：规则秒断、零 token 成本；灰区交给 AI Hub Agent 和它的 SQL 工具；医保理赔场景（跨城重复报销、Agent 关联理赔、黑名单机构）；一组爆发式支付里 Agent 自己把三笔关联起来，认出账户盗用模式；最后是审计链路——token、延迟、可回放会话 id 一应俱全。
 

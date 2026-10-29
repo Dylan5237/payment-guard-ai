@@ -10,8 +10,8 @@
 <p>Every decision — rules, agent, mock or fallback — lands in an immutable audit record with full cost observability: prompt/completion tokens, tool-call count, latency, model and the persisted AI Hub session id (replayable via <code>%AI.Agent.Session</code>).</p>
 <h2>Demo video</h2>
 <div class="youtube-embed">
-<iframe src="https://www.youtube.com/embed/ZcotKFBElKM?" width="640" height="360"> </iframe></div>
-<p>Four minutes end to end: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, the healthcare claims scenario (cross-city duplicate reimbursement, agent-correlated claims, blacklisted provider), a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.</p>
+<iframe src="https://www.youtube.com/embed/gk_4e_GpJN0?" width="640" height="360"> </iframe></div>
+<p>Four minutes and forty-seven seconds end to end: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, the native Workflow Engine human-review loop, the healthcare claims scenario (cross-city duplicate reimbursement, agent-correlated claims, blacklisted provider), a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.</p>
 <h2>The architecture</h2>
 <p>REST callers enter through the <em>PaymentGuard REST</em> business service; the <em>Decision</em> business process orchestrates enrichment (live SQL), the deterministic rule engine, and — only for the gray zone — the AI Hub agent, then routes the outcome to settlement, a human review queue or a fraud alert. Every hop is a traced interoperability message in the Management Portal message viewer.</p>
 <p><img style="max-width: 100%;width: 2792px;height: 1552px;" src="/sites/default/files/inline-images/architecture.en_1793242490.png" data-entity-uuid="b9da8813-b4c6-4c69-bbf8-92891df660ad" data-entity-type="file" alt="PaymentGuard AI system architecture: Web Gateway sidecar, IRIS interoperability production with REST BS, Decision BP, AI Risk Agent, Settle/Review/Alert operations and the vector-enabled IRIS database" width="2792" height="1552" loading="lazy"></p>
@@ -24,7 +24,7 @@
 <ul>
 <li data-list-item-id="ebd863dcbad7c42149ffd622f30a48d9d"><strong>INSTRUCTIONS</strong> — a payment-underwriter persona with an explicit decision policy (BLOCK only on converging signals, REVIEW when unusual-but-plausible, APPROVE when consistent with established profile) and a strict JSON output contract: <code>action</code>, <code>risk_score</code>, <code>confidence</code>, snake_case <code>reasons[]</code>, a human-readable <code>summary</code>.</li>
 <li data-list-item-id="ebe313079be6627cd001e61ebba0a2767"><strong>Tools</strong> — six read-only tools (<code>%AI.Tool</code> methods): customer profile, recent transactions, payment velocity, device reputation, merchant statistics, semantic similarity search. Each is live SQL over the production's own tables; the agent decides what to verify.</li>
-<li data-list-item-id="ea588da6808e85b0eacd6fed3460e801b"><strong>Provider-agnostic</strong> — DeepSeek out of the box (<code>AI_PROVIDER</code> / <code>AI_MODEL</code> / <code>&lt;PROVIDER&gt;_API_KEY</code> in <code>.env</code>); any AI Hub provider works.</li>
+<li data-list-item-id="ea588da6808e85b0eacd6fed3460e801b"><strong>Provider-agnostic</strong> — DeepSeek out of the box (<code>AI_PROVIDER</code> / <code>AI_MODEL</code> / <code><PROVIDER>_API_KEY</code> in <code>.env</code>); any AI Hub provider works.</li>
 </ul>
 <p>The decision process treats the agent like any fallible dependency: its answer is parsed defensively (plain JSON, fenced JSON, JSON-in-prose), validated against the contract, and any failure degrades to a human REVIEW with a reason code — an AI outage never silently approves and never blocks revenue.</p>
 <h2>Real decisions, real reasons</h2>
@@ -35,7 +35,11 @@
 </blockquote>
 <blockquote><p><strong>REVIEW, risk 45</strong> — "Customer's established history is DE e-commerce spend with AWS/Siemens, but this is a first-seen device making a card payment at a Turkish luxury watch merchant. Amount is small and there is no velocity burst … risk is moderate rather than clear-cut — route to human review."</p>
 </blockquote>
-<p>The first decision is the interesting one: the agent <strong>correlated three separate payments inside the same burst</strong> (via its velocity tool) and named the fraud pattern. Every decision row carries prompt/completion tokens, tool-call count, latency, model and the persisted AI Hub session id — any decision can be replayed with <code>##class(%AI.Agent.Session).%OpenId(id)</code>. In the demo run the agent spent ~3,000 prompt + ~350 completion tokens and ~2–3 s per gray-zone decision; the fast-path and rule decisions cost zero.</p>
+<p>The first decision is the interesting one: the agent <strong>correlated three separate payments inside the same burst</strong> (via its velocity tool) and named the fraud pattern. Every decision row carries prompt/completion tokens, tool-call count, latency, model and the persisted AI Hub session id — any decision can be replayed with <code>##class(%AI.Agent.Session).%OpenId(id)</code>. In the demo run the agent spent ~2,500 prompt + ~200 completion tokens and ~1.5–1.9 s per gray-zone decision; the fast-path and rule decisions cost zero.</p>
+<h2>Human review — the native Workflow Engine closes the loop</h2>
+<p>A REVIEW verdict is not the end of the story: someone has to make the final call. Instead of building a bespoke queue, PaymentGuard hands the case to IRIS's <strong>native Workflow Engine</strong>. On every REVIEW decision the process sends an <code>EnsLib.Workflow.TaskRequest</code> (asynchronously, no timeout) to a new production item — <strong>"PaymentGuard Human Review"</strong>, an ordinary <code>EnsLib.Workflow.Operation</code> configured with <code>AutoCreateRole</code> — so the task lands in a role-based worklist the moment it is created. The task carries the full decision context and two actions: <code>Approve</code> and <code>Reject</code>.</p>
+<p>Analysts see open tasks in the dashboard's <em>Human review</em> panel, or through <code>GET /api/reviews</code>, and decide with <code>POST /api/reviews/decide</code> (<code>task_id</code>, <code>action</code>, <code>reviewer</code>). The endpoint claims the task through the Workflow Engine's <code>AssignTask</code>, completes it with <code>CompleteTask</code>, and pushes a <code>ReviewFinalization</code> request into the <strong>"PaymentGuard Review Finalizer"</strong> business process. The finalizer routes the outcome — <strong>Approve</strong> settles the payment, <strong>Reject</strong> raises a fraud alert (only an explicit approval moves money) — appends an immutable decision row with <code>Source = "HUMAN"</code> and the reviewer in <code>ReviewedBy</code>, updates the transaction, and resolves the case record.</p>
+<p>Two design notes. While a task is open, the Decision BP → Human Review hop stays <em>in-progress</em> in the message viewer — that is the intended semantics of "a session waiting for a human", not a stuck process. And because the Workflow Engine does not call back into a bare <code>OnRequest</code> business process in this build, finalization is an explicit message from the decide endpoint into the finalizer — an honest, fully traced chain (REST → Finalizer → Settle / Alert) instead of a magic wake-up.</p>
 <h2>Replaying what actually happened</h2>
 <p>An agent that moves money has to be auditable, not just fast. PaymentGuard keeps three layers of evidence for every decision, all inside the box:</p>
 <ul>
@@ -44,11 +48,11 @@
 <li data-list-item-id="ec0679e489487634694b83d70283512c6"><strong>Every cost</strong> — the immutable decision record stores prompt/completion tokens, tool calls, latency, model and the session id.</li>
 </ul>
 <p>The dashboard's Flow panel turns those layers into a replay. Trigger any action and its task enters a queue; when the decision lands, the real trace (<code>GET /api/trace</code>) replays hop by hop over the production topology with the real millisecond timings. Below: the same gray-zone payment as above — six hops, 1.89 s end to end, 1.88 s of it the agent reasoning (live DeepSeek). Agent decisions unfold the full message chain from <code>GET /api/reasoning</code> underneath, ending in the verdict and its reason codes.</p>
-<p><img src="/sites/default/files/inline-images/flow-panel_1793265576.png" data-entity-uuid="889d1256-2e5a-4752-b506-71d19d408e22" data-entity-type="file" alt="PaymentGuard AI Flow panel: task queue, the real Ens.MessageHeader trace replayed hop by hop over the production topology, and the agent reasoning chain" style="max-width: 100%;width: 1400px;height: 1480px;" width="1400" height="1480" loading="lazy">
+<p><img style="max-width: 100%;width: 1400px;height: 1480px;" src="/sites/default/files/inline-images/flow-panel_1793265576.png" data-entity-uuid="889d1256-2e5a-4752-b506-71d19d408e22" data-entity-type="file" alt="PaymentGuard AI Flow panel: task queue, the real Ens.MessageHeader trace replayed hop by hop over the production topology, and the agent reasoning chain" width="1400" height="1480" loading="lazy">
 </p><p>Clicking a node answers <em>what exactly flowed through it</em>: <code>GET /api/messages</code> opens the session's real message bodies — the risk context shipped to the agent (profile, velocity, device and merchant intelligence, vector neighbors, the Python prior) and the answer coming back with tokens, latency and session id.</p>
 <p><img style="max-width: 100%;width: 884px;height: 834px;" src="/sites/default/files/inline-images/agent-messages_1793263978.png" data-entity-uuid="040b0279-37d9-4798-a328-8fc8aa592347" data-entity-type="file" alt="Message bodies at the AI Risk Agent node: the risk context JSON shipped to the agent, and the decision JSON coming back with tokens, latency and session id" width="884" height="834" loading="lazy">
 </p><p>Because it is all standard interoperability machinery, the same session deep-links into the Management Portal's Message Viewer (<code>?SESSIONID=…</code>) — the dashboard is a convenience layer over tooling that ships with the product:</p>
-<p><img src="/sites/default/files/inline-images/message-viewer_1793265558.png" data-entity-uuid="42e9e6e9-da3f-4627-8eb5-cb765d3d593b" data-entity-type="file" alt="IRIS Management Portal Message Viewer opened from the dashboard deep link, showing the session filtered message trace" style="max-width: 100%;width: 2670px;height: 2400px;" width="2670" height="2400" loading="lazy">
+<p><img style="max-width: 100%;width: 2670px;height: 2400px;" src="/sites/default/files/inline-images/message-viewer_1793265558.png" data-entity-uuid="42e9e6e9-da3f-4627-8eb5-cb765d3d593b" data-entity-type="file" alt="IRIS Management Portal Message Viewer opened from the dashboard deep link, showing the session filtered message trace" width="2670" height="2400" loading="lazy">
 </p><p>Two notes from running this in production. <strong>Latency:</strong> after slimming the context the agent ships (~2.5k prompt tokens; top-3 history and top-3 vector neighbors instead of five), gray-zone decisions land in 1.4–1.9 s end to end while rules stay in single-digit milliseconds at zero tokens. <strong>Failure mode:</strong> the agent call is capped at 20 s — a hung LLM degrades to a human-review queue item instead of wedging the pipeline. An AI outage never blocks revenue, and never approves silently.</p>
 <h2>Healthcare claims: the same engine, one more fraud domain</h2>
 <p>Health-insurance claim settlement is just a payment with extra vocabulary: the <em>member</em> is the customer, the <em>provider</em> is the merchant, and the claim carries <code>procedure</code>, <code>diagnosis</code> and <code>city</code>. Those fields ride the entire pipeline unchanged — rules, enrichment, agent context, audit trail — so the production learns a second fraud domain through a purely additive change. Two deterministic claim rules extend the rule engine: the same member settling the <strong>same procedure in another city</strong> within 7 days of a settled claim blocks instantly (<code>DUPLICATE_CROSS_CITY_CLAIM</code>), and providers reuse the merchant blacklist (<code>BLACKLISTED_MERCHANT</code>). The agent's instructions map the claim vocabulary and the duplicate-reimbursement pattern, so gray-zone claims get correlated against the member's settlement history.</p>
@@ -67,7 +71,7 @@
 <li data-list-item-id="ee068b2bf81f04e2f39fbf2a1113d38d0"><strong>Vector-similar transactions</strong> — <code>PaymentGuard.Vector.Embedder</code> hashes the structured transaction features (procedure, diagnosis, provider, city, channel, currency, amount band) into a 256-dimension L2-normalized embedding. Deterministic and offline: identical inputs always produce the identical vector, so a query embedding can be recomputed from a row's features without ever reading a stored vector back.</li>
 </ul>
 <p>Every transaction the production persists carries a <code>VECTOR(double, 256)</code> embedding column, and a <code>VECTOR_COSINE</code> top-K search feeds two paths: a pre-computed <code>similar_transactions</code> section in every gray-zone risk context, and a sixth agent tool — <code>SearchSimilarTransactions</code> — so the underwriter can pull semantic neighbors on demand, mid-reasoning. Humans get the same view at <code>GET /api/similar?txn_id=…</code>:</p>
-<pre><code class="language-plaintext">curl -s "localhost:8082/paymentguard/api/similar?txn_id=claimhist_memb_001_CATARACT_SURGERY_3&amp;limit=3"
+<pre><code class="language-plaintext">curl -s "localhost:8082/paymentguard/api/similar?txn_id=claimhist_memb_001_CATARACT_SURGERY_3&limit=3"
 
 {"query_txn_id":"claimhist_memb_001_CATARACT_SURGERY_3","results":[
  {"txn_id":"…Beijing cataract attempt…","procedure":"CATARACT_SURGERY","city":"Beijing","similarity":0.818},
@@ -76,20 +80,20 @@
 </p><p>The duplicate-reimbursement pattern surfaces as a similarity ranking: 0.82 for the same surgery in another city, 0.31 for an unrelated imaging claim. And the agent cites this evidence — a same-city cataract claim (gray zone, the cross-city rule does not fire) came back correlated with both the settled surgery and an identical claim blocked seconds earlier:</p>
 <blockquote><p><strong>BLOCK · AGENT (deepseek-chat)</strong>, risk 88, confidence 0.85 — reasons <code>duplicate_reimbursement</code>, <code>same_procedure_settled_3_days_ago</code>, <code>same_procedure_attempted_in_second_city_same_hour</code>, <code>provider_hopping_beijing_shanghai</code>, <code>identical_amount_and_diagnosis_h25_9</code> — "Member memb_001 already had CATARACT_SURGERY (H25.9, CNY 12,800) settled at Shanghai Renji on 2026-10-25, and 30 seconds before this request an identical claim was attempted at Beijing Union Medical College Hospital and blocked. This is a duplicate reimbursement of the same procedure across two cities within days — block and route to the adjuster to void the earlier settlement if it was fraudulent." — 5,353 prompt + 313 completion tokens, 3.8 s.</p>
 </blockquote>
-<p>The %UnitTest suite grew to 30: embedding determinism and unit norm, seeded-claim retrieval, context injection, self-exclusion, and the end-to-end embedding of every persisted payment.</p>
+<p>The %UnitTest suite grew to 33: embedding determinism and unit norm, seeded-claim retrieval, context injection, self-exclusion, and the end-to-end embedding of every persisted payment.</p>
 <h2>The NoPWS surprise (or: how to serve anything from these builds)</h2>
 <p>The 2026.3 AI Hub EAP builds are <strong>NoPWS</strong> — the private web server on port 52773 is disabled entirely; no portal, no REST, nothing HTTP from the IRIS container. PaymentGuard therefore ships a standard InterSystems <strong>Web Gateway sidecar</strong> and documents the three things that made it work:</p>
 <ul>
 <li data-list-item-id="e144744fabeb77e967fadd67fe38021a4"><strong>Credentials live in CSP.ini</strong> — this gateway build ignores the usual <code>ISC_CSP_IRIS_*</code> env vars; the <code>[LOCAL]</code> section needs <code>Username=CSPSystem</code> / <code>Password=SYS</code>, and the EAP builds no longer create the CSPSystem user, so the installer creates it and enables <code>%Service_WebGateway</code>.</li>
 <li data-list-item-id="e299d000a9a4ef99a189dd0980511f095"><strong>The Apache module dispatches by file extension</strong> (<code>CSPFileTypes csp cls zen cxw</code>) — extensionless REST URLs never reach IRIS. The stack internally rewrites them to a <code>.csp</code> twin route (mod_rewrite + a doubled UrlMap), so pretty URLs like <code>POST /payments</code> work unchanged.</li>
-<li data-list-item-id="ed820968e544a0acd7fd56f238d78aef0"><strong>Unauthenticated demo access</strong> needs the web apps' roles granted to UnknownUser, or every request dies with a <code>&lt;PROTECT&gt;</code>/403 before reaching your dispatch class.</li>
+<li data-list-item-id="ed820968e544a0acd7fd56f238d78aef0"><strong>Unauthenticated demo access</strong> needs the web apps' roles granted to UnknownUser, or every request dies with a <code><PROTECT></code>/403 before reaching your dispatch class.</li>
 </ul>
 <p>The dashboard itself is plain static HTML served straight from Apache (mounted <code>web/</code> directory), polling the API — no build step, no npm.</p>
 <h2>Deployment and distribution</h2>
 <p>The whole stack is containerized — <code>docker compose up -d --build</code> starts IRIS (the AI Hub EAP community image) plus the Web Gateway sidecar described above. Source and one-command quick start: <a href="https://github.com/Dylan5237/payment-guard-ai">github.com/Dylan5237/payment-guard-ai</a>.</p>
 <p>An online demo is live at <a href="http://43.139.159.100:8082/paymentguard/">43.139.159.100:8082/paymentguard</a> — the dashboard, the REST API at <code>/paymentguard/api</code> and the production behind it, deciding in live DeepSeek mode (Management Portal: <code>/csp/sys/UtilHome.csp</code>, <code>SuperUser</code> / <code>SYS</code>).</p>
 <p>It also ships as an IPM package (module <code>paymentguard</code>): classes, REST web apps and the dashboard install with <code>zpm "install paymentguard"</code> — and it is on Open Exchange as <em>PaymentGuard AI</em>.</p>
-<p>No API key? The stack runs end-to-end in <strong>mock mode</strong> — a deterministic engine answers in the same JSON contract, so the flow, dashboard, audit trail and the whole %UnitTest suite work offline (30 tests, green).</p>
+<p>No API key? The stack runs end-to-end in <strong>mock mode</strong> — a deterministic engine answers in the same JSON contract, so the flow, dashboard, audit trail and the whole %UnitTest suite work offline (33 tests, green).</p>
 <h2>What we'd build next</h2>
 <ul>
 <li data-list-item-id="ec2cf70918d2c06ee851e41fca1068507">a second-stage <strong>dispute analyst agent</strong> that works the REVIEW queue with write-scoped tools (place holds, request documents);</li>
@@ -99,92 +103,3 @@
 <p>Thanks to the AI Hub team for the EAP program and the %AI SDK — the agent/production boundary felt genuinely well-designed once we stopped fighting the container's missing web server.</p>
 </div>
           </div>
-
-  </div>
-  </div>    
-   
-
- 
-<div class="line-blue flex-block">
-        <div class="blue-text-doc">
-            <a href="https://openexchange.intersystems.com/package/PaymentGuard-AI" target="_blank"><b>Check the related application on InterSystems Open Exchange</b></a>
-        </div>
-      </div>
-
-  
- 
-
- 
-</div>
-
-<div class="node-more-actions">
-
- 
-
-<div class="content-box"><div class="comment-discussion"><span class="count-discussion">Discussion (<span>1</span>)</span><span class="views_count_subscribe post-actions"><a href="/intsys_modal/login" class="unlogged inactive use-ajax" title="Subscribe"><span class="teaser-small-icon subscriber-icon"></span>0</a></span></div>
-<div class="panel-body"><a href="/intsys_modal/login" class="texareanoactive use-ajax" >Log in or sign up to continue</a>
-			
-			</div>
-        </div>
-
- 
- 
-
-
- 
-  <div class="node-comments" >
-  <div id="comments"></div>
-    <section id="node-post-field-comments" class="field field--name-field-comments field--type-comment field--label-above comment-wrapper">
-
-  
-
-
-      
-    <h2 class="title">Comments</h2>
-    
-  
-
-  
-  
-<article data-comment-user-id="651081" id="comment-288449" class="js-ajax-comments-id-288449 content-box comment js-comment" cid="288449" pid="">
-
-    
-<div class="top-teaser" >
-
-<span class="img_teaser " style="background-image:url(/sites/default/files/pictures/picture-default.png);"></span>
-<a href="https://community.intersystems.com/user/%E4%B8%80%E4%B8%9D%E4%B8%8D%E6%9F%93-%E7%BE%8E%E5%B0%91%E5%B9%B4"><span class="comment__author">一丝不染 美少年</span></a> 
-</span>
-<span class="date_created">· 2 hr ago</span> 
-      </div> 
-
-  <div class="content">
-  
-
-
-    
-            <div class="clearfix text-formatted field field--name-comment-body field--type-text-long field--label-hidden field__item"><p>You're amazing！I admire you so much.</p>
-</div>
-      
-
-     
-  </div>
-  
- <div class="post-actions comment-footer">  
-    <div class="comment-actions">
-<a href="/intsys_modal/login" class="post-actions-link use-ajax" title="Like"><span class="teaser-small-icon like-icon"></span><span class="likes_count">0</span></a>
-    
-<a href="/intsys_modal/login" class="post-actions-link use-ajax" title="Add to bookmarks"><span class="teaser-small-icon bookmarks-icon"></span><span class="bookmarks_count">0</span></a>
-    
-<span data-clipboard-text="https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production#comment-288449" class="hover post-actions-link link-clipboard" title="Copy link to comment"><span class="teaser-small-icon nocount commentcopylink"></span></span>
-</div>
-<div>
-              
-<a href="/intsys_modal/login" class="use-ajax js-ajax-comments-reply" title="Reply"></a>
-    
-    
-   
-
-
-
-    </div>
-</div> 
