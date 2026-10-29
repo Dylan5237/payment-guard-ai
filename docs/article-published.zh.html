@@ -51,11 +51,11 @@
 <li data-list-item-id="eeabdcad3ab7092d6d4bf19933f345aa3"><strong>每一笔成本</strong>——不可变的决策审计记录存 prompt/completion token、工具调用数、延迟、模型和会话 id。</li>
 </ul>
 <p>仪表盘的 Flow 面板把这三层拼成回放。触发任意操作，任务先排队；决策落地后，真实链路（<code>GET /api/trace</code>）按生产拓扑逐跳回放，标注真实毫秒。下面这笔就是上文的灰区支付：6 跳，全程 1.89 秒，其中 1.88 秒是 Agent 在推理（真实 DeepSeek）。Agent 决策还会在下方展开完整消息链（<code>GET /api/reasoning</code>），收尾是判定和原因代码。</p>
-<p><img src="/sites/default/files/inline-images/flow-panel_1793264219.png" data-entity-uuid="d4932acd-18cf-46f2-a1f6-b65f6d32e7b7" data-entity-type="file" alt="PaymentGuard AI 的 Flow 回放面板：任务队列、按生产拓扑逐跳回放的真实 Ens.MessageHeader 链路，以及 Agent 推理链" style="max-width: 100%;width: 1052px;height: 1109px;" width="1052" height="1109" loading="lazy">
+<p><img src="/sites/default/files/inline-images/flow-panel_1793265654.png" data-entity-uuid="e940f05c-8242-43a7-92db-d6f321944d69" data-entity-type="file" alt="PaymentGuard AI 的 Flow 回放面板：任务队列、按生产拓扑逐跳回放的真实 Ens.MessageHeader 链路，以及 Agent 推理链" style="max-width: 100%;width: 1400px;height: 1480px;" width="1400" height="1480" loading="lazy">
 </p><p>点击拓扑节点，回答的是"这一跳里到底流过了什么"：<code>GET /api/messages</code> 打开这个会话的真实消息体——发给 Agent 的风险上下文（画像、速率、设备与商户情报、向量近邻、Python 先验），和带 token、延迟、会话 id 返回的答案。</p>
-<p><img src="/sites/default/files/inline-images/agent-messages_1793264248.png" data-entity-uuid="117e026b-ffdf-4bc7-aac0-e49fead69b10" data-entity-type="file" alt="AI Risk Agent 节点的消息体：发给 Agent 的风险上下文 JSON，与带 token、延迟、会话 id 返回的决策 JSON" style="max-width: 100%;width: 884px;height: 834px;" width="884" height="834" loading="lazy">
+<p><img style="max-width: 100%;width: 884px;height: 834px;" src="/sites/default/files/inline-images/agent-messages_1793264248.png" data-entity-uuid="117e026b-ffdf-4bc7-aac0-e49fead69b10" data-entity-type="file" alt="AI Risk Agent 节点的消息体：发给 Agent 的风险上下文 JSON，与带 token、延迟、会话 id 返回的决策 JSON" width="884" height="834" loading="lazy">
 </p><p>这些本来就是 IRIS 互操作的标准机制，所以同一个会话能深链进管理门户的 Message Viewer（<code>?SESSIONID=…</code>）——仪表盘只是给产品自带的工具加了层便捷入口：</p>
-<p><img src="/sites/default/files/inline-images/message-viewer_1793264295.png" data-entity-uuid="40df3403-8846-421d-8009-2093d01216eb" data-entity-type="file" alt="从仪表盘深链打开的 IRIS 管理门户 Message Viewer，按会话过滤的消息链路" style="max-width: 100%;width: 2160px;height: 1500px;" width="2160" height="1500" loading="lazy">
+<p><img src="/sites/default/files/inline-images/message-viewer_1793265637.png" data-entity-uuid="49cb89d6-e134-4fc1-86d7-4bc69eff5f14" data-entity-type="file" alt="从仪表盘深链打开的 IRIS 管理门户 Message Viewer，按会话过滤的消息链路" style="max-width: 100%;width: 2670px;height: 2400px;" width="2670" height="2400" loading="lazy">
 </p><p>上线运行后的两点补充。<strong>延迟</strong>：把上下文瘦身（约 2.5k prompt token；历史与向量近邻各取 top-3）之后，灰区决策端到端 1.4–1.9 秒，规则路径保持个位数毫秒、零 token。<strong>失败兜底</strong>：Agent 调用 20 秒封顶——LLM 挂起时降级为人工审核队列项，不会卡死管道。AI 故障不挡收入，也绝不静默放行。</p>
 <h2>医保理赔案例：同一引擎注入行业规则</h2>
 <p>医保理赔结算说穿了就是“带行话”的支付场景：参保人是客户，医院/机构是商户，理赔单上多出 <code>procedure</code>（术式）、<code>diagnosis</code>（诊断）和 <code>city</code>（城市）三个字段。这些字段原样跑完整条管线——规则、补全、Agent 上下文、审计——生产就这么学会了第二个反欺诈领域。</p>
@@ -88,7 +88,7 @@
     {"txn_id": "…MRI_BRAIN 理赔…", "procedure": "MRI_BRAIN", "city": "Shanghai", "similarity": 0.307}
   ]
 }</code></pre><p>仪表盘把同一个查询做成了可视化：点决策流任意一行，语义近邻带相似度条出现在下方——连刷的孪生交易 1.000，无关的电子消费 0.353：</p>
-<p><img src="/sites/default/files/inline-images/vector-neighbors_1793264328.png" data-entity-uuid="71977973-76f9-4e1c-b9e7-d63a446bda30" data-entity-type="file" alt="向量相似交易面板：连刷的孪生交易相似度 1.000，无关电子消费 0.353——IRIS 向量检索对 256 维 Embedded Python 嵌入做余弦" style="max-width: 100%;width: 906px;height: 632px;" width="906" height="632" loading="lazy">
+<p><img style="max-width: 100%;width: 906px;height: 632px;" src="/sites/default/files/inline-images/vector-neighbors_1793264328.png" data-entity-uuid="71977973-76f9-4e1c-b9e7-d63a446bda30" data-entity-type="file" alt="向量相似交易面板：连刷的孪生交易相似度 1.000，无关电子消费 0.353——IRIS 向量检索对 256 维 Embedded Python 嵌入做余弦" width="906" height="632" loading="lazy">
 </p><p>重复报销模式直接呈现为一张相似度排行榜：异城同术式 0.82，不相关的影像检查 0.31。Agent 也会引用这份证据——一笔同城的白内障理赔（属于灰色地带，跨城规则不响）回来时，既关联上了已结算的手术，也关联上了几十秒前刚被拦的同一笔：</p>
 <blockquote><p><strong>BLOCK · AGENT（deepseek-chat）</strong>，风险分 88，置信度 0.85——reasons <code>duplicate_reimbursement</code>、<code>same_procedure_settled_3_days_ago</code>、<code>same_procedure_attempted_in_second_city_same_hour</code>、<code>provider_hopping_beijing_shanghai</code>、<code>identical_amount_and_diagnosis_h25_9</code>——"memb_001 已于 2026-10-25 在上海瑞金结算过 CATARACT_SURGERY（H25.9，12,800 元）；本请求之前 30 秒，同一笔理赔刚在北京协和医院被拦。两天内跨两城重复报销同一术式——拦截，并转审核员核查前一笔是否需要作废。"——5,353 prompt + 313 completion token，3.8 秒。</p>
 </blockquote>
