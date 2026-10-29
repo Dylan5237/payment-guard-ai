@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PaymentGuard AI — Live Decision Console</title>
+<link rel="icon" type="image/png" href="logo.png">
 <style>
   :root {
     --bg: #0b1220; --panel: #111a2c; --panel2: #0e1626; --line: #1e2a41;
@@ -14,7 +15,6 @@
   body { background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; padding: 20px; }
   header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
   h1 { font-size: 20px; font-weight: 600; letter-spacing: .3px; }
-  h1 .shield { color: var(--accent); }
   .pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
   .pill.live { color: var(--ok); border-color: var(--ok); }
   .pill.mock { color: var(--warn); border-color: var(--warn); }
@@ -119,6 +119,8 @@
   #topo .node.v-REVIEW rect { fill: rgba(245,166,35,.16); }
   #topo .node.v-BLOCK rect { fill: rgba(244,84,124,.16); }
   #topo .node.v-ai rect { fill: rgba(155,108,243,.2); }
+  #topo .node.think rect { animation: thinkpulse 1.1s ease-in-out infinite; }
+  @keyframes thinkpulse { 0%, 100% { fill: rgba(155,108,243,.14); } 50% { fill: rgba(155,108,243,.34); } }
   @keyframes nodehit { 0% { transform: scale(1); } 38% { transform: scale(1.07); } 100% { transform: scale(1); } }
   #topo .nt { fill: #ecebe8; font-size: 11px; font-weight: 560; }
   #topo .ns { fill: #8b8982; font-size: 8.5px; }
@@ -163,7 +165,7 @@
 </head>
 <body>
 <header>
-  <h1><span class="shield">&#128737;</span> PaymentGuard <span style="color:var(--ai)">AI</span></h1>
+  <h1><img src="logo.png" alt="PaymentGuard AI" style="height:28px;width:auto;margin-right:2px;vertical-align:-0.125em"> PaymentGuard <span style="color:var(--ai)">AI</span></h1>
   <span class="pill" id="prod-pill">&bull;</span>
   <span class="pill model" id="model-pill">…</span>
   <div class="spacer"></div>
@@ -241,12 +243,12 @@
   </div>
   <div class="fp-body">
     <svg id="topo" viewBox="0 0 640 248">
-      <g class="edge" data-edge="rest-bp"><path d="M104,124 L158,124"/></g>
+      <g class="edge" data-edge="bp-rest"><path d="M104,124 L158,124"/></g>
       <g class="edge" data-edge="bp-rules"><path d="M276,110 C298,100 298,50 316,42"/></g>
-      <g class="edge" data-edge="bp-agent"><path d="M276,138 C298,148 298,178 316,186"/></g>
+      <g class="edge" data-edge="agent-bp"><path d="M276,138 C298,148 298,178 316,186"/></g>
       <g class="edge" data-edge="bp-settle"><path d="M276,104 C380,66 420,46 486,44"/></g>
       <g class="edge" data-edge="bp-review"><path d="M276,124 L486,125"/></g>
-      <g class="edge" data-edge="bp-alert"><path d="M276,144 C380,184 420,206 486,206"/></g>
+      <g class="edge" data-edge="alert-bp"><path d="M276,144 C380,184 420,206 486,206"/></g>
       <g class="node" data-node="rest"><rect x="12" y="102" width="92" height="44" rx="9"/><text class="nt" x="58" y="120" text-anchor="middle">REST BS</text><text class="ns" x="58" y="134" text-anchor="middle">payment in</text></g>
       <g class="node" data-node="bp"><rect x="158" y="94" width="118" height="60" rx="10"/><text class="nt" x="217" y="116" text-anchor="middle">Decision BP</text><text class="ns" x="217" y="130" text-anchor="middle">enrich &middot; rules &middot; route</text><text class="ns" x="217" y="142" text-anchor="middle">audit record</text></g>
       <g class="node" data-node="rules"><rect x="316" y="16" width="104" height="40" rx="8"/><text class="nt" x="368" y="33" text-anchor="middle">Rule Engine</text><text class="ns" x="368" y="46" text-anchor="middle">deterministic &middot; 0 tokens</text></g>
@@ -366,21 +368,24 @@ async function post(path, body) {
   return r.json();
 }
 
+let queueChain = Promise.resolve();
 function hook(id, fn) {
   const b = armButton(id);
   b._armed = true;
-  $(id).addEventListener("click", async () => {
+  $(id).addEventListener("click", () => {
     if (b.disabled) return;
     markBusy(id, true); busy(true);
-    try { await fn(); refreshAll(); }
-    catch (e) { toast("Request failed: " + e.message); }
-    finally { busy(false); markBusy(id, false); }
+    queueChain = queueChain.then(async () => {
+      try { await fn(); refreshAll(); }
+      catch (e) { toast("Request failed: " + e.message); }
+      finally { busy(false); markBusy(id, false); }
+    });
   });
 }
 
 // ── Flow replay: task queue + real trace from Ens.MessageHeader ──────
 const NODE_OF = { "PaymentGuard REST": "rest", "PaymentGuard Decision": "bp", "PaymentGuard AI Risk Agent": "agent", "PaymentGuard Settlement": "settle", "PaymentGuard Review Queue": "review", "PaymentGuard Fraud Alerts": "alert" };
-const EDGE_FROM = { "rest-bp": "rest", "bp-agent": "bp", "bp-rules": "bp", "bp-settle": "bp", "bp-review": "bp", "bp-alert": "bp" };
+const EDGE_FROM = { "bp-rest": "rest", "agent-bp": "bp", "bp-rules": "bp", "bp-settle": "bp", "bp-review": "bp", "alert-bp": "bp" };
 const OUTCOME_NODE = { APPROVE: "settle", REVIEW: "review", BLOCK: "alert" };
 const HOP_COLOR = { agent: "#9b6cf3", settle: "#2ecc8f", review: "#f5a623", alert: "#f4547c" };
 const srvMs = t => Date.parse(String(t).replace(" ", "T") + "Z");
@@ -388,21 +393,33 @@ const srvMs = t => Date.parse(String(t).replace(" ", "T") + "Z");
 $("flowfab").addEventListener("click", () => $("flowpanel").classList.toggle("open"));
 $("flowclose").addEventListener("click", () => $("flowpanel").classList.remove("open"));
 
-let taskSeq = 0, dotRAF = 0, replayT = [], idleInt = 0;
+let taskSeq = 0, dotRAF = 0, replayT = [];
 const tasks = [];
 
 function fabUpdate() {
   const running = tasks.filter(t => !t.done).length;
   $("fabcnt").textContent = running || "";
   $("flowfab").classList.toggle("running", running > 0);
-  if (!running && idleInt) { clearInterval(idleInt); idleInt = 0; $("flowdot").style.opacity = 0; }
+  if (!running) waitStop();
 }
-function idleStart() {
-  if (idleInt) return;
-  idleInt = setInterval(() => {
-    runDot("rest-bp", false, "rgba(79,142,247,.85)");
-    hitNode("bp");
-  }, 1100);
+let waitTimers = [], waitTick = 0;
+function waitStart(t0) {
+  waitStop();
+  waitTimers.push(setTimeout(() => { runDot("bp-rest", true, "rgba(79,142,247,.85)"); hitNode("bp"); }, 40));
+  waitTimers.push(setTimeout(() => hitNode("bp"), 400));
+  waitTimers.push(setTimeout(() => {
+    runDot("agent-bp", true, "rgba(155,108,243,.85)");
+    document.querySelector('#topo [data-node="agent"]').classList.add("think");
+    waitTick = setInterval(() => {
+      $("fp-hint").textContent = "persist → enrich → rules → AI Risk Agent reasoning… " + ((Date.now() - t0) / 1000).toFixed(1) + "s (live DeepSeek)";
+    }, 100);
+  }, 620));
+}
+function waitStop() {
+  waitTimers.forEach(clearTimeout); waitTimers = [];
+  clearInterval(waitTick); waitTick = 0;
+  const ag = document.querySelector('#topo [data-node="agent"]');
+  if (ag) ag.classList.remove("think");
 }
 function addTask(label) {
   const t = { id: ++taskSeq, label, t0: Date.now(), hops: null, session: null, info: null, done: false };
@@ -418,12 +435,13 @@ function addTask(label) {
   tasks.push(t);
   fabUpdate();
   $("flowpanel").classList.add("open");
-  idleStart();
+  waitStart(t.t0);
   return t;
 }
 async function finishTask(t, info) {
   t.done = true; t.info = info;
   clearInterval(t.timer);
+  waitStop();
   t.el.querySelector(".tspin").outerHTML = '<span class="tdone">&#10003;</span>';
   setTimeout(() => { const d = t.el.querySelector(".tdone"); if (d) { d.style.transition = "opacity .6s"; d.style.opacity = .35; } }, 2500);
   const b = t.el.querySelector(".tbadge");
@@ -462,10 +480,10 @@ function replayTask(t) {
   clearTopo();
   if (!t.hops || !t.hops.length) { if (t.done) hint("No trace captured for this task (window missed) — click another task or retry."); return; }
   const times = t.hops.map(h => srvMs(h.time));
-  let acc = 60, prev = times[0];
+  let acc = 40, prev = times[0];
   t.hops.forEach((h, i) => {
     const real = Math.max(0, times[i] - prev); prev = times[i];
-    acc += Math.min(Math.max(real, 170), 850);
+    acc += Math.min(Math.max(real, 90), 380);
     replayT.push(setTimeout(() => playHop(h, real), acc));
   });
   replayT.push(setTimeout(() => {
@@ -473,7 +491,7 @@ function replayTask(t) {
     const out = t.info && OUTCOME_NODE[t.info.verdict];
     if (out) { const n = document.querySelector('#topo [data-node="' + out + '"]'); n.classList.add("v-" + t.info.verdict); hitNode(out); }
     hint(summarize(t));
-  }, acc + 250));
+  }, acc + 300));
 }
 function playHop(h, realMs) {
   const a = NODE_OF[h.source], b = NODE_OF[h.target];
@@ -492,7 +510,7 @@ function runDot(key, reverse, color) {
   const path = document.querySelector('.edge[data-edge="' + key + '"] path');
   const dot = $("flowdot");
   cancelAnimationFrame(dotRAF);
-  const len = path.getTotalLength(), st = performance.now(), dur = 430;
+  const len = path.getTotalLength(), st = performance.now(), dur = 300;
   dot.setAttribute("fill", color);
   dot.style.opacity = 1;
   const fr = t => {
@@ -514,7 +532,7 @@ function showMs(key, ms) {
   const m = $("mslab");
   m.setAttribute("x", mid.x); m.setAttribute("y", mid.y - 7); m.textContent = ms + " ms";
   m.style.opacity = 1;
-  clearTimeout(m._h); m._h = setTimeout(() => m.style.opacity = 0, 1800);
+  clearTimeout(m._h); m._h = setTimeout(() => m.style.opacity = 0, 1200);
 }
 function summarize(t) {
   if (!t.hops) return "";
@@ -584,19 +602,34 @@ hook("btn-one", async () => {
 });
 
 hook("btn-burst", async () => {
-  const task = addTask("burst · 8 mixed payments");
-  const r = await post("/payments/batch", { count: 8 });
-  const n = (r.results || []).length;
-  toast("Burst submitted: " + n + " payments decided");
+  const task = addTask("burst · 0/8 decided");
+  const label = task.el.querySelector(".tk");
+  const stamp = Date.now();
+  const rand = a => a[Math.floor(Math.random() * a.length)];
+  const mk = () => {
+    const k = Math.random();
+    if (k < .45) return { customer_id: rand(["cust_ret_001", "cust_ret_002", "cust_sme_001"]), amount: Math.round(10 + Math.random() * 150), merchant: rand(["Amazon", "Uber", "Shell"]), merchant_category: "RETAIL", channel: "ECOM", geo_country: rand(["US", "BR", "PT"]), device_id: "dev_ret_001" };
+    if (k < .8) return { customer_id: rand(["cust_ret_003", "cust_sme_002", "cust_risk_001"]), amount: Math.round(250 + Math.random() * 1200), merchant: rand(["FastElectronics", "LuxWatch Ltd", "TravelHub", "GadgetWorld"]), merchant_category: "ELECTRONICS", channel: "CARD", geo_country: rand(["SG", "HK", "AE", "TR"]), device_id: "dev_new_" + Math.floor(Math.random() * 400) };
+    return { customer_id: rand(["cust_ret_001", "cust_ret_003", "cust_sme_002"]), amount: Math.round(900 + Math.random() * 3500), merchant: rand(["CryptoExchange X", "LuxWatch Ltd", "FastElectronics"]), merchant_category: "CRYPTO", channel: "CARD", geo_country: rand(["NG", "RU", "VE", "PK"]), device_id: "dev_shared_7" };
+  };
+  let done = 0; const agentTxns = [];
+  await Promise.allSettled(Array.from({ length: 8 }, (_, i) =>
+    post("/payments", Object.assign({ txn_id: "burst_" + stamp + "_" + i, currency: "USD" }, mk())).then(r => {
+      done++;
+      label.textContent = "burst · " + done + "/8 decided";
+      if (r.source === "AGENT") agentTxns.push(r.txn_id);
+      refreshAll();
+    }).catch(() => { done++; label.textContent = "burst · " + done + "/8 decided"; })
+  ));
+  toast("Burst complete: 8 payments decided");
   let session = null;
   try {
     const d = await (await fetch(API + "/decisions?limit=15")).json();
     const byTxn = {};
     (d.decisions || []).forEach(x => { if (x.session_id) byTxn[x.txn_id] = x.session_id; });
-    const agentTxn = ((r.results || []).find(x => x.source === "AGENT") || {}).txn_id;
-    session = agentTxn ? byTxn[agentTxn] || null : null;
+    session = agentTxns.length ? byTxn[agentTxns[0]] || null : null;
   } catch (e) {}
-  await finishTask(task, { burst: true, count: n, source: "BATCH", session });
+  await finishTask(task, { burst: true, count: 8, source: "BATCH", session });
 });
 
 hook("btn-claims", async () => {
