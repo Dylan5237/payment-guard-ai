@@ -9,7 +9,7 @@
     "repository": {
       "url": "https://github.com/Dylan5237/payment-guard-ai",
       "provider": "github",
-      "revision": "a6484a64ad6ac500c8e3c5bf1d18c3ed4ece5321"
+      "revision": "a3a2cd9a11e1cfb82b87b8f4300e3f2a5b78fabf"
     }
   },
   "components": [
@@ -200,13 +200,55 @@
       ]
     },
     {
+      "id": "humanrev",
+      "type": "backend",
+      "label": "Human Review",
+      "sublabel": "Workflow Engine task · Approve/Reject",
+      "pos": [
+        1160,
+        560
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "tag": "Workflow",
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/DecisionBP.cls"
+        },
+        {
+          "path": "src/PaymentGuard/Production.cls"
+        }
+      ]
+    },
+    {
+      "id": "finalizer",
+      "type": "backend",
+      "label": "Review Finalizer",
+      "sublabel": "Final call · settle / alert",
+      "pos": [
+        1400,
+        560
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/FinalizeBP.cls"
+        }
+      ]
+    },
+    {
       "id": "irisdb",
       "type": "database",
       "label": "IRIS Database",
       "sublabel": "Transaction %Vector(256)",
       "pos": [
         1104,
-        600
+        700
       ],
       "size": [
         220,
@@ -238,7 +280,9 @@
         "settlebo",
         "reviewbo",
         "alertbo",
-        "irisdb"
+        "irisdb",
+        "humanrev",
+        "finalizer"
       ],
       "pad": 20
     },
@@ -251,7 +295,9 @@
         "agentop",
         "settlebo",
         "reviewbo",
-        "alertbo"
+        "alertbo",
+        "humanrev",
+        "finalizer"
       ],
       "pad": 14
     }
@@ -347,8 +393,97 @@
       "fromSide": "right",
       "toSide": "top",
       "labelAt": [
-        1200,
-        568
+        1180,
+        650
+      ]
+    },
+    {
+      "id": "c-human",
+      "from": "decisionbp",
+      "to": "humanrev",
+      "label": "REVIEW",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [
+          1122,
+          317
+        ],
+        [
+          1122,
+          591
+        ]
+      ],
+      "labelAt": [
+        1114,
+        520
+      ]
+    },
+    {
+      "id": "c-final",
+      "from": "humanrev",
+      "to": "finalizer",
+      "label": "human decision",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [
+          1244,
+          660
+        ],
+        [
+          1484,
+          660
+        ]
+      ],
+      "labelAt": [
+        1364,
+        660
+      ]
+    },
+    {
+      "id": "c-approve2",
+      "from": "finalizer",
+      "to": "settlebo",
+      "label": "Approve",
+      "toSide": "right",
+      "fromSide": "top",
+      "via": [
+        [
+          1484,
+          139
+        ]
+      ],
+      "labelAt": [
+        1484,
+        330
+      ]
+    },
+    {
+      "id": "c-block2",
+      "from": "finalizer",
+      "to": "alertbo",
+      "label": "Reject",
+      "toSide": "right",
+      "fromSide": "right",
+      "via": [
+        [
+          1600,
+          591
+        ],
+        [
+          1600,
+          459
+        ],
+        [
+          1328,
+          459
+        ]
+      ],
+      "labelAt": [
+        1430,
+        459
       ]
     }
   ],
@@ -359,7 +494,8 @@
       "items": [
         "RuleEngine hard rules return APPROVE / BLOCK outright",
         "PyModel logistic-regression prior score (Embedded Python)",
-        "Gray-zone payments go to the AI agent synchronously; failures fall back to review"
+        "Gray-zone payments go to the AI agent synchronously; failures fall back to review",
+        "REVIEW decisions open native Workflow Engine tasks; the Review Finalizer settles or alerts"
       ]
     },
     {

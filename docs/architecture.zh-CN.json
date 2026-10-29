@@ -9,7 +9,7 @@
     "repository": {
       "url": "https://github.com/Dylan5237/payment-guard-ai",
       "provider": "github",
-      "revision": "545cac07551ede4dcec8502c365ce9d10d0818b3"
+      "revision": "a3a2cd9a11e1cfb82b87b8f4300e3f2a5b78fabf"
     }
   },
   "components": [
@@ -18,57 +18,113 @@
       "type": "frontend",
       "label": "风控仪表盘",
       "sublabel": "web/index.html",
-      "pos": [300, 96],
-      "size": [168, 64],
-      "sources": [{ "path": "web/index.html" }]
+      "pos": [
+        300,
+        96
+      ],
+      "size": [
+        168,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/index.html"
+        }
+      ]
     },
     {
       "id": "clients",
       "type": "external",
       "label": "支付请求方",
       "sublabel": "商户 · 医保理赔",
-      "pos": [32, 292],
-      "size": [148, 64]
+      "pos": [
+        32,
+        292
+      ],
+      "size": [
+        148,
+        64
+      ]
     },
     {
       "id": "webgateway",
       "type": "cloud",
       "label": "Web Gateway",
       "sublabel": "Apache + CSP · :8082",
-      "pos": [300, 292],
-      "size": [168, 66],
+      "pos": [
+        300,
+        292
+      ],
+      "size": [
+        168,
+        66
+      ],
       "tag": "sidecar 容器",
-      "sources": [{ "path": "webgateway/CSP.ini" }]
+      "sources": [
+        {
+          "path": "webgateway/CSP.ini"
+        }
+      ]
     },
     {
       "id": "restbs",
       "type": "backend",
       "label": "REST BS",
       "sublabel": "/api/payments · /claims",
-      "pos": [568, 292],
-      "size": [176, 66],
-      "sources": [{ "path": "src/PaymentGuard/REST/BS.cls" }]
+      "pos": [
+        568,
+        292
+      ],
+      "size": [
+        176,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/REST/BS.cls"
+        }
+      ]
     },
     {
       "id": "decisionbp",
       "type": "backend",
       "label": "Decision BP",
       "sublabel": "规则先行 · 灰区交 AI",
-      "pos": [816, 276],
-      "size": [184, 82],
-      "sources": [{ "path": "src/PaymentGuard/Interop/DecisionBP.cls" }]
+      "pos": [
+        816,
+        276
+      ],
+      "size": [
+        184,
+        82
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/DecisionBP.cls"
+        }
+      ]
     },
     {
       "id": "agentop",
       "type": "backend",
       "label": "AI Risk Agent",
       "sublabel": "%AI.Agent · 6 工具",
-      "pos": [816, 490],
-      "size": [184, 74],
+      "pos": [
+        816,
+        490
+      ],
+      "size": [
+        184,
+        74
+      ],
       "tag": "AI Hub",
       "sources": [
-        { "path": "src/PaymentGuard/Interop/AgentOperation.cls" },
-        { "path": "src/PaymentGuard/Agent/RiskAgent.cls" }
+        {
+          "path": "src/PaymentGuard/Interop/AgentOperation.cls"
+        },
+        {
+          "path": "src/PaymentGuard/Agent/RiskAgent.cls"
+        }
       ]
     },
     {
@@ -76,8 +132,14 @@
       "type": "external",
       "label": "DeepSeek LLM",
       "sublabel": "deepseek-chat",
-      "pos": [320, 640],
-      "size": [168, 62],
+      "pos": [
+        320,
+        640
+      ],
+      "size": [
+        168,
+        62
+      ],
       "brand": "deepseek"
     },
     {
@@ -85,70 +147,345 @@
       "type": "backend",
       "label": "Settle BO",
       "sublabel": "APPROVE · 自动结算",
-      "pos": [1160, 108],
-      "size": [168, 62],
-      "sources": [{ "path": "src/PaymentGuard/Interop/SettleBO.cls" }]
+      "pos": [
+        1160,
+        108
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/SettleBO.cls"
+        }
+      ]
     },
     {
       "id": "reviewbo",
       "type": "backend",
       "label": "Review BO",
       "sublabel": "REVIEW · 人工案件",
-      "pos": [1160, 268],
-      "size": [168, 62],
-      "sources": [{ "path": "src/PaymentGuard/Interop/ReviewBO.cls" }]
+      "pos": [
+        1160,
+        268
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/ReviewBO.cls"
+        }
+      ]
     },
     {
       "id": "alertbo",
       "type": "backend",
       "label": "Alert BO",
       "sublabel": "BLOCK · 欺诈告警",
-      "pos": [1160, 428],
-      "size": [168, 62],
-      "sources": [{ "path": "src/PaymentGuard/Interop/AlertBO.cls" }]
+      "pos": [
+        1160,
+        428
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/AlertBO.cls"
+        }
+      ]
+    },
+    {
+      "id": "humanrev",
+      "type": "backend",
+      "label": "Human Review",
+      "sublabel": "Workflow Engine 任务 · Approve/Reject",
+      "pos": [
+        1160,
+        560
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "tag": "Workflow",
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/DecisionBP.cls"
+        },
+        {
+          "path": "src/PaymentGuard/Production.cls"
+        }
+      ]
+    },
+    {
+      "id": "finalizer",
+      "type": "backend",
+      "label": "Review Finalizer",
+      "sublabel": "裁决回流 · 结算/告警",
+      "pos": [
+        1400,
+        560
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/FinalizeBP.cls"
+        }
+      ]
     },
     {
       "id": "irisdb",
       "type": "database",
       "label": "IRIS 数据库",
       "sublabel": "Transaction %Vector(256)",
-      "pos": [1104, 600],
-      "size": [220, 84],
-      "sources": [{ "path": "src/PaymentGuard/Data/Transaction.cls" }]
+      "pos": [
+        1104,
+        700
+      ],
+      "size": [
+        220,
+        84
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Data/Transaction.cls"
+        }
+      ]
     }
   ],
   "boundaries": [
     {
       "kind": "region",
       "label": "Web Gateway 容器",
-      "wraps": ["webgateway"],
+      "wraps": [
+        "webgateway"
+      ],
       "pad": 14
     },
     {
       "kind": "region",
       "label": "IRIS 容器 · AI EAP 2026.3（NoPWS）",
-      "wraps": ["restbs", "decisionbp", "agentop", "settlebo", "reviewbo", "alertbo", "irisdb"],
+      "wraps": [
+        "restbs",
+        "decisionbp",
+        "agentop",
+        "settlebo",
+        "reviewbo",
+        "alertbo",
+        "irisdb",
+        "humanrev",
+        "finalizer"
+      ],
       "pad": 20
     },
     {
       "kind": "region",
       "label": "互操作生产 PaymentGuard.Production",
-      "wraps": ["restbs", "decisionbp", "agentop", "settlebo", "reviewbo", "alertbo"],
+      "wraps": [
+        "restbs",
+        "decisionbp",
+        "agentop",
+        "settlebo",
+        "reviewbo",
+        "alertbo",
+        "humanrev",
+        "finalizer"
+      ],
       "pad": 14
     }
   ],
   "connections": [
-    { "id": "c-https", "from": "clients", "to": "webgateway", "label": "HTTPS :8082", "variant": "emphasis" },
-    { "id": "c-dash", "from": "dashboard", "to": "webgateway", "label": "GET /api/*", "fromSide": "bottom", "toSide": "top", "labelAt": [384, 174] },
-    { "id": "c-csp", "from": "webgateway", "to": "restbs", "label": "CSP 路由" },
-    { "id": "c-pay", "from": "restbs", "to": "decisionbp", "label": "交易 / 理赔" },
-    { "id": "c-gray", "from": "decisionbp", "to": "agentop", "label": "灰区同步调用", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [908, 372] },
-    { "id": "c-llm", "from": "agentop", "to": "deepseek", "label": "chat.completions" },
-    { "id": "c-approve", "from": "decisionbp", "to": "settlebo", "label": "APPROVE" },
-    { "id": "c-review", "from": "decisionbp", "to": "reviewbo", "label": "REVIEW", "labelAt": [1130, 286] },
-    { "id": "c-block", "from": "decisionbp", "to": "alertbo", "label": "BLOCK" },
-    { "id": "c-store", "from": "decisionbp", "to": "irisdb", "label": "落库 + 向量嵌入", "labelAt": [1055, 480] },
-    { "id": "c-tools", "from": "agentop", "to": "irisdb", "label": "SQL + 向量检索", "fromSide": "right", "toSide": "top", "labelAt": [1200, 568] }
+    {
+      "id": "c-https",
+      "from": "clients",
+      "to": "webgateway",
+      "label": "HTTPS :8082",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c-dash",
+      "from": "dashboard",
+      "to": "webgateway",
+      "label": "GET /api/*",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        384,
+        174
+      ]
+    },
+    {
+      "id": "c-csp",
+      "from": "webgateway",
+      "to": "restbs",
+      "label": "CSP 路由"
+    },
+    {
+      "id": "c-pay",
+      "from": "restbs",
+      "to": "decisionbp",
+      "label": "交易 / 理赔"
+    },
+    {
+      "id": "c-gray",
+      "from": "decisionbp",
+      "to": "agentop",
+      "label": "灰区同步调用",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        908,
+        372
+      ]
+    },
+    {
+      "id": "c-llm",
+      "from": "agentop",
+      "to": "deepseek",
+      "label": "chat.completions"
+    },
+    {
+      "id": "c-approve",
+      "from": "decisionbp",
+      "to": "settlebo",
+      "label": "APPROVE"
+    },
+    {
+      "id": "c-review",
+      "from": "decisionbp",
+      "to": "reviewbo",
+      "label": "REVIEW",
+      "labelAt": [
+        1130,
+        286
+      ]
+    },
+    {
+      "id": "c-block",
+      "from": "decisionbp",
+      "to": "alertbo",
+      "label": "BLOCK"
+    },
+    {
+      "id": "c-store",
+      "from": "decisionbp",
+      "to": "irisdb",
+      "label": "落库 + 向量嵌入",
+      "labelAt": [
+        1055,
+        480
+      ]
+    },
+    {
+      "id": "c-tools",
+      "from": "agentop",
+      "to": "irisdb",
+      "label": "SQL + 向量检索",
+      "fromSide": "right",
+      "toSide": "top",
+      "labelAt": [
+        1200,
+        636
+      ]
+    },
+    {
+      "id": "c-human",
+      "from": "decisionbp",
+      "to": "humanrev",
+      "label": "REVIEW",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left",
+      "via": [
+        [
+          1108,
+          317
+        ],
+        [
+          1108,
+          591
+        ]
+      ],
+      "labelAt": [
+        1100,
+        520
+      ]
+    },
+    {
+      "id": "c-final",
+      "from": "humanrev",
+      "to": "finalizer",
+      "label": "裁决回流",
+      "fromSide": "bottom",
+      "toSide": "bottom",
+      "via": [
+        [
+          1244,
+          660
+        ],
+        [
+          1484,
+          660
+        ]
+      ],
+      "labelAt": [
+        1364,
+        660
+      ]
+    },
+    {
+      "id": "c-approve2",
+      "from": "finalizer",
+      "to": "settlebo",
+      "label": "Approve",
+      "toSide": "right",
+      "fromSide": "top",
+      "via": [
+        [
+          1484,
+          139
+        ]
+      ],
+      "labelAt": [
+        1484,
+        330
+      ]
+    },
+    {
+      "id": "c-block2",
+      "from": "finalizer",
+      "to": "alertbo",
+      "label": "Reject",
+      "toSide": "right",
+      "fromSide": "right",
+      "via": [
+        [
+          1600,
+          591
+        ],
+        [
+          1600,
+          459
+        ],
+        [
+          1328,
+          459
+        ]
+      ],
+      "labelAt": [
+        1430,
+        459
+      ]
+    }
   ],
   "cards": [
     {
@@ -157,7 +494,8 @@
       "items": [
         "RuleEngine 硬规则直接 APPROVE / BLOCK",
         "PyModel 逻辑回归先验分（Embedded Python）",
-        "灰区交易同步交 AI Agent，失败兜底转人工"
+        "灰区交易同步交 AI Agent，失败兜底转人工",
+        "REVIEW 判定走原生 Workflow 引擎建任务，Review Finalizer 结算或告警"
       ]
     },
     {
