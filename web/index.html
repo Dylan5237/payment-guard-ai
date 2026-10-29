@@ -25,6 +25,8 @@
   button.secondary { background: var(--panel); border: 1px solid var(--line); color: var(--text); }
   button:disabled { opacity: .5; cursor: wait; }
   button.wf-act { padding: 4px 11px; font-size: 11.5px; border-radius: 6px; margin-right: 4px; }
+  button.mini { padding: 3px 9px; font-size: 11px; border-radius: 6px; font-weight: 500; opacity: .78; }
+  button.mini:hover { opacity: 1; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .card .num { font-size: 26px; font-weight: 700; margin-top: 2px; }
@@ -186,7 +188,7 @@
   <button id="btn-one">Send payment</button>
   <button id="btn-claims" class="secondary">Healthcare claim demo ×3</button>
   <button id="btn-burst" class="secondary">Simulate burst (8)</button>
-  <button id="btn-seed" class="secondary">Reseed data</button>
+  <button id="btn-seed" class="secondary mini" title="Admin only — requires the admin password">Reseed data</button>
 </header>
 
 <div class="cards">
@@ -304,6 +306,18 @@
   </div>
 </section>
 <div id="toast"></div>
+<div id="pwdlg" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:120; align-items:center; justify-content:center">
+  <div style="background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; width:300px; box-shadow:0 18px 50px rgba(0,0,0,.4)">
+    <div style="font-size:13px; font-weight:600">Admin password</div>
+    <div style="font-size:11.5px; color:var(--muted); margin-top:4px">Reseed wipes all demo data. Enter the admin password to continue.</div>
+    <input id="pwd-input" type="password" spellcheck="false" autocomplete="off"
+      style="width:100%; box-sizing:border-box; margin-top:10px; background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:6px; padding:8px 10px; font-size:13px">
+    <div style="display:flex; gap:8px; margin-top:12px; justify-content:flex-end">
+      <button id="pwd-cancel" class="secondary mini">Cancel</button>
+      <button id="pwd-ok" class="mini">Reseed</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const API = "/paymentguard/api";
@@ -805,14 +819,35 @@ async function showSimilar(txnId) {
   } catch (e) { toast("Similarity query failed: " + e.message); }
 }
 
+function askPassword() {
+  return new Promise(resolve => {
+    const dlg = $("pwdlg"), inp = $("pwd-input");
+    dlg.style.display = "flex";
+    inp.value = ""; inp.focus();
+    const done = v => {
+      dlg.style.display = "none";
+      $("pwd-ok").onclick = $("pwd-cancel").onclick = inp.onkeydown = null;
+      resolve(v);
+    };
+    $("pwd-ok").onclick = () => done(inp.value.trim());
+    $("pwd-cancel").onclick = () => done("");
+    inp.onkeydown = e => { if (e.key === "Enter") done(inp.value.trim()); if (e.key === "Escape") done(""); };
+  });
+}
+
 hook("btn-seed", async () => {
-  let tok = localStorage.getItem("pg-admin-token");
-  if (!tok) {
-    tok = prompt("Admin token for /admin endpoints (ADMIN_TOKEN in .env — see OPERATIONS.md):") || "";
-    if (tok) localStorage.setItem("pg-admin-token", tok);
+  const tok = await askPassword();
+  if (!tok) return;
+  const res = await fetch(API + "/admin/reseed", { method: "POST", headers: { "X-Admin-Token": tok } });
+  const text = await res.text();
+  // the endpoint echoes Ens.Director log lines before the JSON body on success
+  let r = {};
+  try { r = JSON.parse(text); } catch (e) {
+    const i = text.indexOf("{");
+    if (i >= 0) { try { r = JSON.parse(text.slice(i)); } catch (e2) {} }
   }
-  const r = await (await fetch(API + "/admin/reseed", { method: "POST", headers: { "X-Admin-Token": tok } })).json();
-  if (r.error) { localStorage.removeItem("pg-admin-token"); throw new Error(r.error); }
+  if (r.error) throw new Error("wrong password or reseed refused: " + r.error);
+  if (!r.reseeded) throw new Error("unexpected response: " + text.slice(0, 120));
   toast("Demo data reseeded");
 });
 
