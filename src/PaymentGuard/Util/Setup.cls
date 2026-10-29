@@ -34,14 +34,19 @@ ClassMethod ConfigureWebApps() As %Status
     Quit tSC
 }
 
-/// Start the production if it is not running already.
+/// Start the production if it is not running already. Retried three times:
+/// at instance boot %ZSTART can fire before the interoperability subsystem
+/// is ready, and a single StartProduction attempt silently loses that race.
 ClassMethod EnsureRunning() As %Status
 {
     Set tSC = $$$OK
-    Try {
-        Do ##class(Ens.Director).StartProduction(..#PRODUCTION)
-    } Catch ex {
-        // Already running or transient - report state via GetProductionState
+    For attempt = 1:1:3 {
+        Try {
+            Do ##class(Ens.Director).StartProduction(..#PRODUCTION)
+        } Catch ex {
+            // Already running or transient - a later attempt covers the race
+        }
+        Hang 4
     }
     Quit tSC
 }
