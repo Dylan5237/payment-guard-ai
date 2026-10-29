@@ -108,6 +108,8 @@
   .fp-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; background: var(--f2); }
   .fp-title { font-size: 13.5px; font-weight: 600; letter-spacing: .2px; }
   .fp-sub { font-size: 11px; color: var(--fmuted); margin-top: 2px; }
+  .mlink { color: var(--accent); text-decoration: none; }
+  .mlink:hover { text-decoration: underline; }
   #flowclose { background: transparent; color: var(--fmuted); font-size: 15px; padding: 4px 9px; margin-left: auto; }
   #flowclose:hover { color: #ecebe8; }
   .fp-body { padding: 12px 14px 16px; overflow-y: auto; }
@@ -237,7 +239,7 @@
   <div class="fp-head">
     <div>
       <div class="fp-title">Flow replay</div>
-      <div class="fp-sub">real message hops from <span class="mono">Ens.MessageHeader</span> — what actually happened inside the IRIS production</div>
+      <div class="fp-sub">real message hops from <a id="mhlink" class="mono mlink" href="/csp/irisapp/EnsPortal.MessageViewer.zen" target="_blank" title="Open in the Management Portal message viewer">Ens.MessageHeader</a> — what actually happened inside the IRIS production</div>
     </div>
     <button id="flowclose" aria-label="Close">&#10005;</button>
   </div>
@@ -468,6 +470,8 @@ async function captureTrace(t, info) {
 function selectTask(t) {
   tasks.forEach(x => x.el.classList.remove("sel"));
   t.el.classList.add("sel");
+  const base = "/csp/irisapp/EnsPortal.MessageViewer.zen";
+  $("mhlink").href = (t.hops && t.hops.length) ? base + "?SESSIONID=" + t.hops[0].session : base;
   replayTask(t);
   loadReasoning(t);
 }
