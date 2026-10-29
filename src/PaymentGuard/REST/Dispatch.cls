@@ -1,7 +1,9 @@
 Include (%occStatus)
 
 /// REST API for PaymentGuard. Mounted at /paymentguard/api by the module.
-/// Unauthenticated on purpose for the demo; see README for production notes.
+/// Decision and inspection endpoints are unauthenticated on purpose for the
+/// demo; admin endpoints (/admin/*) require the X-Admin-Token shared secret.
+/// See README and OPERATIONS.md for production notes.
 Class PaymentGuard.REST.Dispatch Extends %CSP.REST
 {
 
@@ -32,6 +34,8 @@ XData UrlMap
   <Route Url="/reviews" Method="GET" Call="ListReviews"/>
   <Route Url="/reviews/decide" Method="POST" Call="DecideReview"/>
   <Route Url="/stats" Method="GET" Call="Stats"/>
+  <Route Url="/admin/model" Method="GET" Call="GetModelSettings"/>
+  <Route Url="/admin/model" Method="PUT" Call="PutModelSettings"/>
   <Route Url="/admin/reseed" Method="POST" Call="Reseed"/>
   <!-- .csp-suffixed twins: the Web Gateway's Apache module only intercepts
        requests whose path carries a listed file extension, so the gateway
@@ -50,6 +54,8 @@ XData UrlMap
   <Route Url="/reviews.csp" Method="GET" Call="ListReviews"/>
   <Route Url="/reviews/decide.csp" Method="POST" Call="DecideReview"/>
   <Route Url="/stats.csp" Method="GET" Call="Stats"/>
+  <Route Url="/admin/model.csp" Method="GET" Call="GetModelSettings"/>
+  <Route Url="/admin/model.csp" Method="PUT" Call="PutModelSettings"/>
   <Route Url="/admin/reseed.csp" Method="POST" Call="Reseed"/>
 </Routes>
 }
@@ -437,46 +443,6 @@ ClassMethod ListCases() As %Status
     Quit ..WriteJSON({"cases": (arr)})
 }
 
-/// Aggregate stats for the dashboard
-ClassMethod Stats() As %Status
-{
-    Set o = {}
-    Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT Action, COUNT(*) AS Cnt FROM PaymentGuard_Data.Decision GROUP BY Action")
-    If $$$ISOK(tSC) {
-        Set tRS = tStmt.%Execute()
-        While tRS.%Next() {
-            Do o.%Set("action_"_tRS.%Get("Action")_"_count", tRS.%Get("Cnt"))
-        }
-    }
-    Set tSC = tStmt.%Prepare("SELECT Source, COUNT(*) AS Cnt FROM PaymentGuard_Data.Decision GROUP BY Source")
-    If $$$ISOK(tSC) {
-        Set tRS = tStmt.%Execute()
-        While tRS.%Next() {
-            Do o.%Set("source_"_tRS.%Get("Source")_"_count", tRS.%Get("Cnt"))
-        }
-    }
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(PromptTokens),0) AS PTok, COALESCE(SUM(CompletionTokens),0) AS CTok, COALESCE(AVG(LatencyMs),0) AS Lat, COALESCE(AVG(RiskScore),0) AS Risk FROM PaymentGuard_Data.Decision")
-    If $$$ISOK(tSC) {
-        Set tRS = tStmt.%Execute()
-        If tRS.%Next() {
-            Do o.%Set("decision_count", tRS.%Get("Cnt"))
-            Do o.%Set("prompt_tokens_total", tRS.%Get("PTok"))
-            Do o.%Set("completion_tokens_total", tRS.%Get("CTok"))
-            Do o.%Set("avg_latency_ms", tRS.%Get("Lat"))
-            Do o.%Set("avg_risk_score", tRS.%Get("Risk"))
-        }
-    }
-    Set tSC = tStmt.%Prepare("SELECT Type, COUNT(*) AS Cnt FROM PaymentGuard_Data.CaseRecord GROUP BY Type")
-    If $$$ISOK(tSC) {
-        Set tRS = tStmt.%Execute()
-        While tRS.%Next() {
-            Do o.%Set("cases_"_tRS.%Get("Type")_"_count", tRS.%Get("Cnt"))
-        }
-    }
-    Quit ..WriteJSON(o)
-}
-
 /// Open human-review tasks from the native Workflow Engine (EnsLib.Workflow).
 /// The task payload (%Message) carries the decision context; the analyst
 /// actions each task via /reviews/decide.
@@ -523,9 +489,9 @@ ClassMethod ListReviews() As %Status
 }
 
 /// Take a human-review action on one Workflow task: claim it for the reviewer
-/// (if still unassigned) and complete it with Approve or Reject. The
-/// Workflow Engine delivers the final TaskResponse; the Review Finalizer
-/// then settles or blocks the payment (see FinalizeBP).
+/// (if still unassigned) and complete it with Approve or Reject. The Workflow
+/// Engine then delivers the TaskResponse back to the Decision BP, which
+/// finalizes settlement or the fraud alert.
 ClassMethod DecideReview() As %Status
 {
     Set body = ..ReadBody()
@@ -555,7 +521,7 @@ ClassMethod DecideReview() As %Status
 
     // Push the final decision back into the production: the Review Finalizer
     // routes settlement/alert, appends the HUMAN audit record and resolves
-    // the review case - all visible in the message trace.
+    // the review case — all visible in the message trace.
     Set info = ""
     Try {
         Set info = ##class(%DynamicObject).%FromJSON(t.%Message)
@@ -579,18 +545,132 @@ ClassMethod DecideReview() As %Status
 
     Quit ..WriteJSON({"completed": (1), "task_id": (taskId), "action": (action), "reviewer": (t.%UserName), "final_action": (fin.Action)})
 }
+
+/// Aggregate stats for the dashboard
+ClassMethod Stats() As %Status
+{
+    Set o = {}
+    Set tStmt = ##class(%SQL.Statement).%New()
+    Set tSC = tStmt.%Prepare("SELECT Action, COUNT(*) AS Cnt FROM PaymentGuard_Data.Decision GROUP BY Action")
+    If $$$ISOK(tSC) {
+        Set tRS = tStmt.%Execute()
+        While tRS.%Next() {
+            Do o.%Set("action_"_tRS.%Get("Action")_"_count", tRS.%Get("Cnt"))
+        }
+    }
+    Set tSC = tStmt.%Prepare("SELECT Source, COUNT(*) AS Cnt FROM PaymentGuard_Data.Decision GROUP BY Source")
+    If $$$ISOK(tSC) {
+        Set tRS = tStmt.%Execute()
+        While tRS.%Next() {
+            Do o.%Set("source_"_tRS.%Get("Source")_"_count", tRS.%Get("Cnt"))
+        }
+    }
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(PromptTokens),0) AS PTok, COALESCE(SUM(CompletionTokens),0) AS CTok, COALESCE(AVG(LatencyMs),0) AS Lat, COALESCE(AVG(RiskScore),0) AS Risk FROM PaymentGuard_Data.Decision")
+    If $$$ISOK(tSC) {
+        Set tRS = tStmt.%Execute()
+        If tRS.%Next() {
+            Do o.%Set("decision_count", tRS.%Get("Cnt"))
+            Do o.%Set("prompt_tokens_total", tRS.%Get("PTok"))
+            Do o.%Set("completion_tokens_total", tRS.%Get("CTok"))
+            Do o.%Set("avg_latency_ms", tRS.%Get("Lat"))
+            Do o.%Set("avg_risk_score", tRS.%Get("Risk"))
+        }
+    }
+    Set tSC = tStmt.%Prepare("SELECT Type, COUNT(*) AS Cnt FROM PaymentGuard_Data.CaseRecord GROUP BY Type")
+    If $$$ISOK(tSC) {
+        Set tRS = tStmt.%Execute()
+        While tRS.%Next() {
+            Do o.%Set("cases_"_tRS.%Get("Type")_"_count", tRS.%Get("Cnt"))
+        }
+    }
+    Quit ..WriteJSON(o)
+}
+
 /// Reseed demo data. Stops the production first: wiping tables while
 /// requests are in flight poisons the shutdown state and wedges every
 /// subsequent start (ErrProductionNotShutdownCleanly).
 ClassMethod Reseed() As %Status
 {
-    Do ##class(Ens.Director).StopProduction()
-    Hang 2
-    Set sc = ##class(PaymentGuard.Data.Populate).Seed(1)
-    Do ##class(PaymentGuard.Util.Setup).EnsureRunning()
-    Hang 2
+    Set token = ##class(PaymentGuard.Util.Config).AdminToken()
+    If token = "" Quit ..WriteError(503, "No admin token configured - set ADMIN_TOKEN in .env (or ^PaymentGuardSettings(""AdminToken"")) before calling admin endpoints")
+    If %request.GetCgiEnv("HTTP_X_ADMIN_TOKEN") '= token Quit ..WriteError(401, "Invalid or missing X-Admin-Token header")
+    Set sc = ##class(PaymentGuard.Util.Setup).ResetDemo()
     If $$$ISERR(sc) Quit ..WriteError(500, $System.Status.GetErrorText(sc))
     Quit ..WriteJSON({"reseeded": (1)})
+}
+
+/// ── admin ───────────────────────────────────────────────────
+
+/// Effective model configuration and where each value comes from. The API key
+/// itself is never returned — only whether one is configured.
+ClassMethod GetModelSettings() As %Status
+{
+    Set o = {}
+    Do o.%Set("provider", ##class(PaymentGuard.Util.Config).ProviderName())
+    Do o.%Set("provider_source", ##class(PaymentGuard.Util.Config).ProviderSource())
+    Do o.%Set("model", ##class(PaymentGuard.Util.Config).ModelName())
+    Do o.%Set("model_source", ##class(PaymentGuard.Util.Config).ModelSource())
+    Do o.%Set("base_url", ##class(PaymentGuard.Util.Config).BaseUrl())
+    Do o.%Set("base_url_source", ##class(PaymentGuard.Util.Config).BaseUrlSource())
+    Do o.%Set("api_key_present", ##class(PaymentGuard.Util.Config).APIKey() '= "", "boolean")
+    Do o.%Set("api_key_source", ##class(PaymentGuard.Util.Config).APIKeySource())
+    Do o.%Set("agent_mode", $Select(##class(PaymentGuard.Util.Config).MockRequested(): "mock", 1: "live"))
+    Quit ..WriteJSON(o)
+}
+
+/// Update model configuration at runtime. Each field is optional: a non-empty
+/// value sets the runtime override, an explicit empty string clears it (the
+/// setting falls back to its env/default). "mock": true/false flips the agent
+/// between the deterministic mock engine and the live LLM. Changes apply to
+/// the next decision — no restart needed.
+ClassMethod PutModelSettings() As %Status
+{
+    Set token = ##class(PaymentGuard.Util.Config).AdminToken()
+    If token = "" Quit ..WriteError(503, "No admin token configured - set ADMIN_TOKEN in .env (or ^PaymentGuardSettings(""AdminToken"")) before calling admin endpoints")
+    If %request.GetCgiEnv("HTTP_X_ADMIN_TOKEN") '= token Quit ..WriteError(401, "Invalid or missing X-Admin-Token header")
+    Set body = ..ReadBody()
+    If '$IsObject(body) Quit ..WriteError(400, "Invalid or missing JSON body")
+
+    If body.%Get("provider", $Char(0)) '= $Char(0) {
+        Set v = body.%Get("provider")
+        If v = "" {
+            Kill ^PaymentGuardSettings("Provider")
+        } Else {
+            Set ^PaymentGuardSettings("Provider") = v
+        }
+    }
+    If body.%Get("model", $Char(0)) '= $Char(0) {
+        Set v = body.%Get("model")
+        If v = "" {
+            Kill ^PaymentGuardSettings("Model")
+        } Else {
+            Set ^PaymentGuardSettings("Model") = v
+        }
+    }
+    If body.%Get("base_url", $Char(0)) '= $Char(0) {
+        Set v = body.%Get("base_url")
+        If v = "" {
+            Kill ^PaymentGuardSettings("BaseUrl")
+        } Else {
+            Set ^PaymentGuardSettings("BaseUrl") = v
+        }
+    }
+    If body.%Get("api_key", $Char(0)) '= $Char(0) {
+        Set v = body.%Get("api_key")
+        If v = "" {
+            Kill ^PaymentGuardSettings("APIKey")
+        } Else {
+            Set ^PaymentGuardSettings("APIKey") = v
+        }
+    }
+    If body.%Get("mock", $Char(0)) '= $Char(0) {
+        If body.%Get("mock") = 1 {
+            Set ^PaymentGuardSettings("MockMode") = 1
+        } Else {
+            Kill ^PaymentGuardSettings("MockMode")
+        }
+    }
+    Quit ..GetModelSettings()
 }
 
 }

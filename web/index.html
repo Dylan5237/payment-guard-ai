@@ -223,7 +223,7 @@
 </div>
 
 <div class="panel" id="wfpanel" style="margin-top:14px">
-  <h2>Human review &mdash; native IRIS Workflow Engine
+  <h2>Human review — native IRIS Workflow Engine
     <span style="text-transform:none;letter-spacing:0;font-weight:400">&nbsp;— every REVIEW decision opens a task; the analyst's call flows back into the production</span>
     <span style="float:right;margin-top:-5px;font-size:11px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted)">reviewer&nbsp;
       <input id="wf-reviewer" value="RiskAnalyst" spellcheck="false" style="background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 8px;font-size:11px;width:110px">
@@ -267,7 +267,7 @@
   <div class="fp-head">
     <div>
       <div class="fp-title">Flow replay</div>
-      <div class="fp-sub">real message hops from <a id="mhlink" class="mono mlink" href="/csp/irisapp/EnsPortal.MessageViewer.zen" target="_blank" title="Open in the Management Portal message viewer — login SuperUser / SYS">Ens.MessageHeader</a> — what actually happened inside the IRIS production &middot; portal login: <span class="mono">SuperUser / SYS</span></div>
+      <div class="fp-sub">real message hops from <a id="mhlink" class="mono mlink" href="/csp/irisapp/EnsPortal.MessageViewer.zen" target="_blank" title="Open in the Management Portal message viewer">Ens.MessageHeader</a> — what actually happened inside the IRIS production</div>
     </div>
     <button id="flowclose" aria-label="Close">&#10005;</button>
   </div>
@@ -389,7 +389,7 @@ async function refreshCases() {
       <tr>
         <td><span class="mono">${esc(x.case_id)}</span><br><span class="mono">${esc(x.txn_id)}</span></td>
         <td><span class="badge ${x.type === "ALERT" ? "BLOCK" : "REVIEW"}">${x.type}</span></td>
-        <td>${esc(x.priority)}${x.status === "RESOLVED" ? `<br><span class="mono" style="color:var(--ok)">&#10003; ${x.resolution} &middot; ${esc(x.resolved_by || "")}</span>` : ""}</td>
+        <td>${esc(x.priority)}${x.status === "RESOLVED" ? `<br><span class="mono" style="color:var(--ok)">&#10003; ${x.resolution} · ${esc(x.resolved_by || "")}</span>` : ""}</td>
       </tr>`).join("");
     $("cases").innerHTML = rows;
     $("cases-empty").style.display = rows ? "none" : "block";
@@ -805,7 +805,16 @@ async function showSimilar(txnId) {
   } catch (e) { toast("Similarity query failed: " + e.message); }
 }
 
-hook("btn-seed", async () => { await post("/admin/reseed"); toast("Demo data reseeded"); });
+hook("btn-seed", async () => {
+  let tok = localStorage.getItem("pg-admin-token");
+  if (!tok) {
+    tok = prompt("Admin token for /admin endpoints (ADMIN_TOKEN in .env — see OPERATIONS.md):") || "";
+    if (tok) localStorage.setItem("pg-admin-token", tok);
+  }
+  const r = await (await fetch(API + "/admin/reseed", { method: "POST", headers: { "X-Admin-Token": tok } })).json();
+  if (r.error) { localStorage.removeItem("pg-admin-token"); throw new Error(r.error); }
+  toast("Demo data reseeded");
+});
 
 // ── Human review actions: claim + complete the native Workflow task ──
 $("wfbody").addEventListener("click", async e => {

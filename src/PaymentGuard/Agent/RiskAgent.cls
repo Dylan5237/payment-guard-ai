@@ -104,7 +104,7 @@ Method %OnInit() As %Status
     }
     Set settings = {}
     Do settings.%Set("api_key", key)
-    Set base = ##class(PaymentGuard.Util.Config).Env("AI_BASE_URL")
+    Set base = ##class(PaymentGuard.Util.Config).BaseUrl()
     If base '= "" Do settings.%Set("base_url", base)
     Set ..Provider = ##class(%AI.Provider).Create(prov, settings)
     Set ..Model = ##class(PaymentGuard.Util.Config).ModelName()
