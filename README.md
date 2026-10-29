@@ -61,6 +61,8 @@ A 4-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone
 
 The production item **"PaymentGuard AI Risk Agent"** is the contest's centerpiece: an ordinary `Ens.BusinessOperation` that hosts the AI Hub agent in-process. A business process talks to the AI exactly like it talks to any other operation — queued, traced in the message viewer, retryable — while the operation internally runs `%AI.Agent`, persists the session and reports token usage.
 
+Two further items close the loop around the gray zone: **"PaymentGuard Human Review"** (the native Workflow Engine operation, `EnsLib.Workflow.Operation`) opens a human task for every REVIEW decision, and **"PaymentGuard Review Finalizer"** settles or blocks the payment when the analyst answers — see [Human review](#human-review--native-workflow-engine).
+
 ### The agent
 
 `PaymentGuard.Agent.RiskAgent` extends `%AI.Agent`:
@@ -77,7 +79,7 @@ The production item **"PaymentGuard AI Risk Agent"** is the contest's centerpiec
 2. **Enrich** — customer, 1h/24h velocity, last 3 transactions, device reputation, merchant 30-day stats, top-3 vector-similar historical transactions
 3. **Rules** — blacklist, failed KYC, sanctioned geo, segment caps, velocity spike → `BLOCK`; trusted + small + home + known device → `APPROVE` fast path. Everything in between is the gray zone
 4. **Agent** — gray-zone payments are sent (as `PaymentGuard.Request.AgentDecision`) to the AI Risk Agent operation; the agent may call its tools, then must answer with JSON; the answer is parsed defensively (`Util.JSON.ExtractObject`) and validated (`Util.Validator.ValidDecision`)
-5. **Route** — `APPROVE` → Settlement, `REVIEW` → human review queue (case record), `BLOCK` → fraud alert
+5. **Route** — `APPROVE` → Settlement, `REVIEW` → human review queue (case record) **+ a native Workflow Engine task** for the review role, `BLOCK` → fraud alert. When the analyst completes the task, the Review Finalizer process routes the final call (settle or alert), appends the `HUMAN` audit record and resolves the case
 6. **Audit** — decision record with reasons, model, session id, tokens, latency; transaction status updated
 
 ---
@@ -206,6 +208,37 @@ KYC-pending), `cust_sme_001/002` (business), `cust_risk_001` (high-risk), `cust_
 (blacklisted) — with ~30 days of history so tools and enrichment return real data.
 
 ---
+
+## Human review — native Workflow Engine
+
+Every REVIEW decision — whether the gray-zone agent asked for a human or the
+fail-safe fallback kicked in — opens a task in IRIS's **native Workflow Engine**
+(`EnsLib.Workflow`):
+
+- The Decision BP sends an `EnsLib.Workflow.TaskRequest` (async, no timeout)
+  to the *PaymentGuard Human Review* operation; the task lands in the
+  `PaymentGuard Human Review` **role** with the full decision context as its
+  message payload and `Approve,Reject` as its actions. The message trace shows
+  the session waiting on the human.
+- An analyst completes the task from the dashboard's *Human review* panel or
+  via `POST /reviews/decide`. The Workflow Engine's task lifecycle does the
+  bookkeeping (worklist items, claim/assign, completion).
+- The **Review Finalizer** business process then finalizes the payment inside
+  the production — routes settlement or fraud alert, appends an immutable
+  `HUMAN` audit record (with the reviewer's name), flips the transaction to
+  `SETTLED`/`BLOCKED` and resolves the review case. Conservative by design:
+  only an explicit **Approve** settles; a reject — or anything else — blocks.
+
+```bash
+# a gray-zone payment lands in review…
+curl -s -X POST localhost:8082/paymentguard/api/payments -H "Content-Type: application/json" \
+  -d '{"customer_id":"cust_ret_002","amount":600,"geo_country":"SG","device_id":"dev_rev_1","merchant":"GadgetWorld"}'
+# …which opens a workflow task
+curl -s localhost:8082/paymentguard/api/reviews
+# the analyst decides — the finalizer settles or blocks, fully traced
+curl -s -X POST localhost:8082/paymentguard/api/reviews/decide -H "Content-Type: application/json" \
+  -d '{"task_id":1,"action":"Approve","reviewer":"RiskAnalyst"}'
+```
 
 ## Healthcare claims scenario
 

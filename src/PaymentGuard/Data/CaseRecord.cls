@@ -24,6 +24,14 @@ Property Summary As %String(MAXLEN = 4000);
 /// OPEN | RESOLVED
 Property Status As %String(VALUELIST = ",OPEN,RESOLVED") [ InitialExpression = "OPEN" ];
 
+/// APPROVE | BLOCK — the human analyst's final call (Workflow Engine task)
+Property Resolution As %String(VALUELIST = ",APPROVE,BLOCK");
+
+/// Workflow user who resolved the case
+Property ResolvedBy As %String(MAXLEN = 64);
+
+Property ResolvedAt As %TimeStamp;
+
 Property CreatedAt As %TimeStamp [ InitialExpression = {$ZDATETIME($HOROLOG,3,1)} ];
 
 Index CaseIdIdx On CaseId [ Unique ];

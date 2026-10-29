@@ -9,7 +9,8 @@ Class PaymentGuard.Tests.TestClaims Extends %UnitTest.TestCase
 Method OnBeforeAllTests() As %Status
 {
     Set ^PaymentGuardSettings("MockMode") = 1
-    Do ##class(PaymentGuard.Data.Populate).Seed(1)
+    // Clean reset: stop first - reseeding while the production runs poisons it
+    Do ##class(PaymentGuard.Util.Setup).ResetDemo()
     Quit ##class(PaymentGuard.Util.Setup).EnsureRunning()
 }
 

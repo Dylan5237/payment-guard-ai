@@ -11,7 +11,9 @@ Include (%occStatus)
 ///      tools); any agent failure or malformed answer degrades to a fail-safe
 ///      human REVIEW — an AI outage never blocks revenue and never approves
 ///      silently
-///   5. Route the outcome: settlement, human review queue or fraud alert
+///   5. Route the outcome: settlement, human review queue or fraud alert;
+///      REVIEW also opens a native Workflow Engine task — the analyst's
+///      Approve/Reject returns as a TaskResponse and finalizes the payment
 ///   6. Persist an immutable decision audit record with full agent cost data
 Class PaymentGuard.Interop.DecisionBP Extends Ens.BusinessProcess
 {
@@ -23,6 +25,9 @@ Parameter SETTLETARGET = "PaymentGuard Settlement";
 Parameter REVIEWTARGET = "PaymentGuard Review Queue";
 
 Parameter ALERTTARGET = "PaymentGuard Fraud Alerts";
+
+/// EnsLib.Workflow.Operation item — the role is named after this config name
+Parameter WORKFLOWTARGET = "PaymentGuard Human Review";
 
 Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As PaymentGuard.Response.Decision) As %Status
 {
@@ -146,6 +151,39 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
     If $$$ISERR(routeSC) {
         // Routing failure must not lose the decision itself
         Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Routing to "_target_" failed for txn="_txnId_": "_$System.Status.GetErrorText(routeSC))
+    }
+
+    // ── 5b. REVIEW: open a native Workflow Engine task ──────
+    // The task lands in the "PaymentGuard Human Review" role's worklist; when
+    // the analyst completes it (Approve/Reject), the Review Finalizer process
+    // settles or blocks the payment. Sent async with no timeout: the BP
+    // replies to the caller now, and the message trace shows the session
+    // waiting on the human.
+    If action = "REVIEW" {
+        Set wf = ##class(EnsLib.Workflow.TaskRequest).%New()
+        Set wf.%Subject = "Payment review "_txnId_" - "_pRequest.CustomerId_" - "_pRequest.Amount_" "_txn.Currency
+        Set payload = {
+            "txn_id": (txnId),
+            "customer_id": (pRequest.CustomerId),
+            "amount": (pRequest.Amount),
+            "currency": (txn.Currency),
+            "action": "REVIEW",
+            "source": (source),
+            "risk_score": (riskScore),
+            "reasons": (reasonCodes),
+            "summary": (summary),
+            "model": (model),
+            "agent_session_id": (sessionId)
+        }
+        Set wf.%Message = payload.%ToJSON()
+        Set wf.%Actions = "Approve,Reject"
+        Set wf.%Priority = $Select(riskScore >= 70: 1, riskScore >= 40: 2, 1: 3)
+        Set wfSC = ..SendRequestAsync(..#WORKFLOWTARGET, wf, 0)
+        If $$$ISERR(wfSC) {
+            Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Workflow task creation failed for txn="_txnId_": "_$System.Status.GetErrorText(wfSC))
+        } Else {
+            Do ##class(Ens.Util.Log).LogInfo($classname(),"OnRequest","Workflow task opened for txn="_txnId_" role="_..#WORKFLOWTARGET)
+        }
     }
 
     // ── 6. Audit record + close the transaction ───────────────

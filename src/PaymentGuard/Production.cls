@@ -24,6 +24,11 @@ XData ProductionDefinition
   </Item>
   <Item Name="PaymentGuard Fraud Alerts" Category="" ClassName="PaymentGuard.Interop.AlertBO" PoolSize="1" Enabled="true" Foreground="false" Comment="" LogTraceEvents="false" Schedule="">
   </Item>
+  <Item Name="PaymentGuard Human Review" Category="Workflow" ClassName="EnsLib.Workflow.Operation" PoolSize="1" Enabled="true" Foreground="false" Comment="Native Workflow Engine - every REVIEW decision opens a task for the human risk team (role = this config name); completing the task triggers the Review Finalizer" LogTraceEvents="false" Schedule="">
+    <Setting Target="Host" Name="AutoCreateRole">1</Setting>
+  </Item>
+  <Item Name="PaymentGuard Review Finalizer" Category="Workflow" ClassName="PaymentGuard.Interop.FinalizeBP" PoolSize="1" Enabled="true" Foreground="false" Comment="Finalizes REVIEW payments when the human completes the workflow task: routes settlement/alert, appends the HUMAN audit record, resolves the case" LogTraceEvents="false" Schedule="">
+  </Item>
 </Production>
 }
 

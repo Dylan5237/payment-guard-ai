@@ -10,6 +10,9 @@ Class PaymentGuard.Data.Populate
 ClassMethod Seed(pForce As %Boolean = 0) As %Status
 {
     If pForce {
+        // Close open human-review tasks first: their transactions are about
+        // to be wiped (no response delivery — the production is stopped)
+        Do ##class(PaymentGuard.Util.Setup).CancelOpenWorkflowTasks()
         Do ##class(PaymentGuard.Data.CaseRecord).%KillExtent()
         Do ##class(PaymentGuard.Data.Decision).%KillExtent()
         Do ##class(PaymentGuard.Data.Transaction).%KillExtent()

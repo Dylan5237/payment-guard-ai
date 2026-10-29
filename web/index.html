@@ -24,6 +24,7 @@
   button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
   button.secondary { background: var(--panel); border: 1px solid var(--line); color: var(--text); }
   button:disabled { opacity: .5; cursor: wait; }
+  button.wf-act { padding: 4px 11px; font-size: 11.5px; border-radius: 6px; margin-right: 4px; }
   .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
   .card .num { font-size: 26px; font-weight: 700; margin-top: 2px; }
@@ -46,6 +47,7 @@
   .chip.AGENT { background: rgba(155,108,243,.15); color: var(--ai); }
   .chip.MOCK { background: rgba(155,108,243,.1); color: #b9a0f8; }
   .chip.FALLBACK { background: rgba(244,84,124,.12); color: var(--bad); }
+  .chip.HUMAN { background: rgba(79,142,247,.14); color: var(--accent); }
   .mono { font-family: Consolas, monospace; font-size: 12px; color: var(--muted); }
   .risk { display: inline-block; min-width: 34px; text-align: center; border-radius: 6px; padding: 2px 6px; font-weight: 700; font-size: 12px; }
   .risk.lo { background: rgba(46,204,143,.12); color: var(--ok); }
@@ -220,6 +222,22 @@
   </div>
 </div>
 
+<div class="panel" id="wfpanel" style="margin-top:14px">
+  <h2>Human review &mdash; native IRIS Workflow Engine
+    <span style="text-transform:none;letter-spacing:0;font-weight:400">&nbsp;— every REVIEW decision opens a task; the analyst's call flows back into the production</span>
+    <span style="float:right;margin-top:-5px;font-size:11px;text-transform:none;letter-spacing:0;font-weight:400;color:var(--muted)">reviewer&nbsp;
+      <input id="wf-reviewer" value="RiskAnalyst" spellcheck="false" style="background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:6px;padding:3px 8px;font-size:11px;width:110px">
+    </span>
+  </h2>
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Opened</th><th>Task / payment</th><th>Risk</th><th>Origin</th><th>Assigned</th><th>Decision</th></tr></thead>
+      <tbody id="wfbody"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="wf-empty">No open human-review tasks — a REVIEW decision will queue one here (role: PaymentGuard Human Review).</div>
+</div>
+
 <div class="panel" id="vecpanel" style="margin-top:14px">
   <h2>Vector-similar transactions
     <span style="text-transform:none;letter-spacing:0;font-weight:400">&nbsp;— IRIS Vector Search · cosine over 256-dim Embedded-Python embeddings · click any decision above</span>
@@ -254,20 +272,22 @@
     <button id="flowclose" aria-label="Close">&#10005;</button>
   </div>
   <div class="fp-body">
-    <svg id="topo" viewBox="0 0 640 248">
+    <svg id="topo" viewBox="0 0 640 264">
       <g class="edge" data-edge="bp-rest"><path d="M104,124 L158,124"/></g>
       <g class="edge" data-edge="bp-rules"><path d="M276,110 C298,100 298,50 316,42"/></g>
       <g class="edge" data-edge="agent-bp"><path d="M276,138 C298,148 298,178 316,186"/></g>
       <g class="edge" data-edge="bp-settle"><path d="M276,104 C380,66 420,46 486,44"/></g>
       <g class="edge" data-edge="bp-review"><path d="M276,124 L486,125"/></g>
-      <g class="edge" data-edge="alert-bp"><path d="M276,144 C380,184 420,206 486,206"/></g>
+      <g class="edge" data-edge="bp-human"><path d="M276,132 C380,146 420,168 486,168"/></g>
+      <g class="edge" data-edge="alert-bp"><path d="M276,144 C380,192 420,222 486,224"/></g>
       <g class="node" data-node="rest"><rect x="12" y="102" width="92" height="44" rx="9"/><text class="nt" x="58" y="120" text-anchor="middle">REST BS</text><text class="ns" x="58" y="134" text-anchor="middle">payment in</text></g>
       <g class="node" data-node="bp"><rect x="158" y="94" width="118" height="60" rx="10"/><text class="nt" x="217" y="116" text-anchor="middle">Decision BP</text><text class="ns" x="217" y="130" text-anchor="middle">enrich &middot; rules &middot; route</text><text class="ns" x="217" y="142" text-anchor="middle">audit record</text></g>
       <g class="node" data-node="rules"><rect x="316" y="16" width="104" height="40" rx="8"/><text class="nt" x="368" y="33" text-anchor="middle">Rule Engine</text><text class="ns" x="368" y="46" text-anchor="middle">deterministic &middot; 0 tokens</text></g>
       <g class="node" data-node="agent"><rect x="316" y="160" width="118" height="52" rx="8"/><text class="nt" x="375" y="179" text-anchor="middle">AI Risk Agent</text><text class="ns" x="375" y="192" text-anchor="middle">DeepSeek &middot; 6 SQL+vector tools</text><text class="ns" x="375" y="203" text-anchor="middle">vector search evidence</text></g>
       <g class="node" data-node="settle"><rect x="486" y="26" width="124" height="36" rx="8"/><text class="nt" x="548" y="48" text-anchor="middle">Settlement BO</text></g>
       <g class="node" data-node="review"><rect x="486" y="107" width="124" height="36" rx="8"/><text class="nt" x="548" y="129" text-anchor="middle">Review Queue BO</text></g>
-      <g class="node" data-node="alert"><rect x="486" y="188" width="124" height="36" rx="8"/><text class="nt" x="548" y="210" text-anchor="middle">Fraud Alert BO</text></g>
+      <g class="node" data-node="human"><rect x="486" y="150" width="124" height="36" rx="8"/><text class="nt" x="548" y="166" text-anchor="middle">Human Review</text><text class="ns" x="548" y="179" text-anchor="middle">Workflow Engine task</text></g>
+      <g class="node" data-node="alert"><rect x="486" y="206" width="124" height="36" rx="8"/><text class="nt" x="548" y="228" text-anchor="middle">Fraud Alert BO</text></g>
       <circle id="flowdot" r="4" style="opacity:0"/>
       <text id="mslab" class="mslab" style="opacity:0"></text>
     </svg>
@@ -354,7 +374,8 @@ async function refreshFeed() {
         <td><span class="risk ${riskClass(x.risk_score)}">${x.risk_score}</span></td>
         <td><div class="summary">${esc(x.summary || "")}</div>
             <div class="reasons">${(x.reasons || []).map(r => `<span>${esc(r)}</span>`).join("")}
-            ${x.source === "AGENT" || x.source === "MOCK" ? `<span style="color:var(--ai)">${x.prompt_tokens + x.completion_tokens} tok &middot; ${x.latency_ms} ms${x.model ? " &middot; " + esc(x.model) : ""}</span>` : ""}</div></td>
+            ${x.source === "AGENT" || x.source === "MOCK" ? `<span style="color:var(--ai)">${x.prompt_tokens + x.completion_tokens} tok &middot; ${x.latency_ms} ms${x.model ? " &middot; " + esc(x.model) : ""}</span>` : ""}
+            ${x.reviewed_by ? `<span style="color:var(--accent)">final call: ${esc(x.reviewed_by)}</span>` : ""}</div></td>
       </tr>`).join("");
     $("feed").innerHTML = rows;
     $("feed-empty").style.display = rows ? "none" : "block";
@@ -368,14 +389,33 @@ async function refreshCases() {
       <tr>
         <td><span class="mono">${esc(x.case_id)}</span><br><span class="mono">${esc(x.txn_id)}</span></td>
         <td><span class="badge ${x.type === "ALERT" ? "BLOCK" : "REVIEW"}">${x.type}</span></td>
-        <td>${esc(x.priority)}</td>
+        <td>${esc(x.priority)}${x.status === "RESOLVED" ? `<br><span class="mono" style="color:var(--ok)">&#10003; ${x.resolution} &middot; ${esc(x.resolved_by || "")}</span>` : ""}</td>
       </tr>`).join("");
     $("cases").innerHTML = rows;
     $("cases-empty").style.display = rows ? "none" : "block";
   } catch (e) {}
 }
 
-async function refreshAll() { refreshHealth(); refreshStats(); refreshFeed(); refreshCases(); }
+async function refreshReviews() {
+  try {
+    const r = await (await fetch(API + "/reviews?limit=10")).json();
+    const rows = (r.reviews || []).map(x => `
+      <tr data-task="${esc(x.task_id)}">
+        <td class="mono">${esc((x.time || "").slice(5, 19))}</td>
+        <td><span class="mono">${esc(x.txn_id || "?")}</span><br><b>${esc(x.customer_id || "")}</b> <span class="mono">${(+x.amount).toLocaleString()} ${esc(x.currency || "")}</span>
+            <div class="summary">${esc(x.summary || "")}</div></td>
+        <td><span class="risk ${riskClass(x.risk_score)}">${x.risk_score ?? "–"}</span></td>
+        <td><span class="chip ${esc(x.source || "")}">${x.source === "AGENT" ? "AI AGENT" : x.source || ""}</span></td>
+        <td class="mono">${esc(x.assigned_to || "(unassigned)")}</td>
+        <td><button class="wf-act" data-act="Approve" style="background:var(--ok)">Approve</button>
+            <button class="wf-act" data-act="Reject" style="background:var(--bad)">Reject</button></td>
+      </tr>`).join("");
+    $("wfbody").innerHTML = rows;
+    $("wf-empty").style.display = rows ? "none" : "block";
+  } catch (e) {}
+}
+
+async function refreshAll() { refreshHealth(); refreshStats(); refreshFeed(); refreshCases(); refreshReviews(); }
 
 async function post(path, body) {
   const r = await fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
@@ -398,8 +438,8 @@ function hook(id, fn) {
 }
 
 // ── Flow replay: task queue + real trace from Ens.MessageHeader ──────
-const NODE_OF = { "PaymentGuard REST": "rest", "PaymentGuard Decision": "bp", "PaymentGuard AI Risk Agent": "agent", "PaymentGuard Settlement": "settle", "PaymentGuard Review Queue": "review", "PaymentGuard Fraud Alerts": "alert" };
-const EDGE_FROM = { "bp-rest": "rest", "agent-bp": "bp", "bp-rules": "bp", "bp-settle": "bp", "bp-review": "bp", "alert-bp": "bp" };
+const NODE_OF = { "PaymentGuard REST": "rest", "PaymentGuard Decision": "bp", "PaymentGuard AI Risk Agent": "agent", "PaymentGuard Settlement": "settle", "PaymentGuard Review Queue": "review", "PaymentGuard Human Review": "human", "PaymentGuard Fraud Alerts": "alert" };
+const EDGE_FROM = { "bp-rest": "rest", "agent-bp": "bp", "bp-rules": "bp", "bp-settle": "bp", "bp-review": "bp", "bp-human": "bp", "alert-bp": "bp" };
 const OUTCOME_NODE = { APPROVE: "settle", REVIEW: "review", BLOCK: "alert" };
 const HOP_COLOR = { agent: "#9b6cf3", settle: "#2ecc8f", review: "#f5a623", alert: "#f4547c" };
 const srvMs = t => Date.parse(String(t).replace(" ", "T") + "Z");
@@ -492,7 +532,7 @@ function selectTask(t) {
 }
 
 // ── Node click → the actual messages of that hop for the selected task ──
-const NODE_LABEL = { rest: "REST BS", bp: "Decision BP", rules: "Rule Engine", agent: "AI Risk Agent", settle: "Settlement BO", review: "Review Queue BO", alert: "Fraud Alert BO" };
+const NODE_LABEL = { rest: "REST BS", bp: "Decision BP", rules: "Rule Engine", agent: "AI Risk Agent", settle: "Settlement BO", review: "Review Queue BO", human: "Human Review (Workflow)", alert: "Fraud Alert BO" };
 document.querySelectorAll("#topo .node").forEach(n => n.addEventListener("click", () => { hitNode(n.dataset.node); nodeMsgs(n.dataset.node); }));
 function closeMsgs() {
   $("msgacc").classList.remove("open");
@@ -766,6 +806,29 @@ async function showSimilar(txnId) {
 }
 
 hook("btn-seed", async () => { await post("/admin/reseed"); toast("Demo data reseeded"); });
+
+// ── Human review actions: claim + complete the native Workflow task ──
+$("wfbody").addEventListener("click", async e => {
+  const b = e.target.closest("button.wf-act");
+  if (!b || b.disabled) return;
+  const tr = b.closest("tr");
+  const action = b.dataset.act;
+  const task_id = +tr.dataset.task;
+  const reviewer = $("wf-reviewer").value.trim() || "RiskAnalyst";
+  tr.querySelectorAll("button.wf-act").forEach(x => { x.disabled = true; x.style.opacity = .5; });
+  busy(true);
+  try {
+    const r = await (await fetch(API + "/reviews/decide", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id, action, reviewer })
+    })).json();
+    if (r.error) { toast("Review failed: " + r.error, 4000); tr.querySelectorAll("button.wf-act").forEach(x => { x.disabled = false; x.style.opacity = 1; }); }
+    else { toast("Human decision recorded: " + action + " by " + (r.reviewer || reviewer) + " — flowing back into the production"); refreshAll(); }
+  } catch (err) {
+    toast("Review failed: " + err.message, 4000);
+    tr.querySelectorAll("button.wf-act").forEach(x => { x.disabled = false; x.style.opacity = 1; });
+  } finally { busy(false); }
+});
 
 refreshAll();
 setInterval(refreshAll, 3000);

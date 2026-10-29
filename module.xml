@@ -3,7 +3,7 @@
   <Document name="paymentguard.ZPM">
     <Module>
       <Name>paymentguard</Name>
-      <Version>0.3.0</Version>
+      <Version>0.4.0</Version>
       <Description>PaymentGuard AI - AI Hub agent decisioning inside an IRIS interoperability production</Description>
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>

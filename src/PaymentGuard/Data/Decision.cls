@@ -18,8 +18,11 @@ Property Currency As %String(MAXLEN = 3);
 /// APPROVE | REVIEW | BLOCK
 Property Action As %String(VALUELIST = ",APPROVE,REVIEW,BLOCK");
 
-/// RULES | AGENT | MOCK | FALLBACK
-Property Source As %String(VALUELIST = ",RULES,AGENT,MOCK,FALLBACK");
+/// RULES | AGENT | MOCK | FALLBACK | HUMAN (final call from the Workflow task)
+Property Source As %String(VALUELIST = ",RULES,AGENT,MOCK,FALLBACK,HUMAN");
+
+/// Workflow user who made the final human decision (Source = HUMAN rows only)
+Property ReviewedBy As %String(MAXLEN = 64);
 
 Property RiskScore As %Integer;
 

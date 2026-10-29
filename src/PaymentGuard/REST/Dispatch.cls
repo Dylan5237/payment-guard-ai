@@ -29,6 +29,8 @@ XData UrlMap
   <Route Url="/reasoning" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases" Method="GET" Call="ListCases"/>
+  <Route Url="/reviews" Method="GET" Call="ListReviews"/>
+  <Route Url="/reviews/decide" Method="POST" Call="DecideReview"/>
   <Route Url="/stats" Method="GET" Call="Stats"/>
   <Route Url="/admin/reseed" Method="POST" Call="Reseed"/>
   <!-- .csp-suffixed twins: the Web Gateway's Apache module only intercepts
@@ -45,6 +47,8 @@ XData UrlMap
   <Route Url="/reasoning.csp" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions.csp" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases.csp" Method="GET" Call="ListCases"/>
+  <Route Url="/reviews.csp" Method="GET" Call="ListReviews"/>
+  <Route Url="/reviews/decide.csp" Method="POST" Call="DecideReview"/>
   <Route Url="/stats.csp" Method="GET" Call="Stats"/>
   <Route Url="/admin/reseed.csp" Method="POST" Call="Reseed"/>
 </Routes>
@@ -368,7 +372,7 @@ ClassMethod ListDecisions() As %Status
     If limit > 200 Set limit = 200
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP ? TxnId, CustomerId, Amount, Action, Source, RiskScore, Confidence, ReasonCodes, Summary, Model, SessionId, PromptTokens, CompletionTokens, ToolCalls, LatencyMs, CreatedAt FROM PaymentGuard_Data.Decision ORDER BY ID DESC")
+    Set tSC = tStmt.%Prepare("SELECT TOP ? TxnId, CustomerId, Amount, Action, Source, RiskScore, Confidence, ReasonCodes, Summary, Model, SessionId, PromptTokens, CompletionTokens, ToolCalls, LatencyMs, ReviewedBy, CreatedAt FROM PaymentGuard_Data.Decision ORDER BY ID DESC")
     If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
     Set tRS = tStmt.%Execute(limit)
     While tRS.%Next() {
@@ -397,6 +401,7 @@ ClassMethod ListDecisions() As %Status
         Do row.%Set("completion_tokens", tRS.%Get("CompletionTokens"))
         Do row.%Set("tool_calls", tRS.%Get("ToolCalls"))
         Do row.%Set("latency_ms", tRS.%Get("LatencyMs"))
+        Do row.%Set("reviewed_by", tRS.%Get("ReviewedBy"))
         Do row.%Set("created_at", tRS.%Get("CreatedAt"))
         Do arr.%Push(row)
     }
@@ -411,7 +416,7 @@ ClassMethod ListCases() As %Status
     If limit > 200 Set limit = 200
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP ? CaseId, TxnId, CustomerId, Type, Priority, RiskScore, Status, Summary, CreatedAt FROM PaymentGuard_Data.CaseRecord ORDER BY ID DESC")
+    Set tSC = tStmt.%Prepare("SELECT TOP ? CaseId, TxnId, CustomerId, Type, Priority, RiskScore, Status, Resolution, ResolvedBy, Summary, CreatedAt FROM PaymentGuard_Data.CaseRecord ORDER BY ID DESC")
     If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
     Set tRS = tStmt.%Execute(limit)
     While tRS.%Next() {
@@ -423,6 +428,8 @@ ClassMethod ListCases() As %Status
         Do row.%Set("priority", tRS.%Get("Priority"))
         Do row.%Set("risk_score", tRS.%Get("RiskScore"))
         Do row.%Set("status", tRS.%Get("Status"))
+        Do row.%Set("resolution", tRS.%Get("Resolution"))
+        Do row.%Set("resolved_by", tRS.%Get("ResolvedBy"))
         Do row.%Set("summary", tRS.%Get("Summary"))
         Do row.%Set("created_at", tRS.%Get("CreatedAt"))
         Do arr.%Push(row)
@@ -470,6 +477,108 @@ ClassMethod Stats() As %Status
     Quit ..WriteJSON(o)
 }
 
+/// Open human-review tasks from the native Workflow Engine (EnsLib.Workflow).
+/// The task payload (%Message) carries the decision context; the analyst
+/// actions each task via /reviews/decide.
+ClassMethod ListReviews() As %Status
+{
+    Set limit = +(%request.Get("limit", 20))
+    If limit < 1 Set limit = 20
+    If limit > 100 Set limit = 100
+    Set arr = []
+    Set tStmt = ##class(%SQL.Statement).%New()
+    Set tSC = tStmt.%Prepare("SELECT TOP 200 ID FROM EnsLib_Workflow.TaskResponse ORDER BY ID DESC")
+    If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
+    Set tRS = tStmt.%Execute()
+    While tRS.%Next() {
+        If arr.%Size() >= limit Quit
+        Set t = ##class(EnsLib.Workflow.TaskResponse).%OpenId(tRS.%Get("ID"))
+        If '$IsObject(t) Continue
+        If t.%TaskStatus.IsComplete Continue
+        Set info = ""
+        Try {
+            Set info = ##class(%DynamicObject).%FromJSON(t.%Message)
+        } Catch ex {
+        }
+        Set row = {}
+        Do row.%Set("task_id", tRS.%Get("ID"))
+        Do row.%Set("subject", t.%Subject)
+        Do row.%Set("actions", t.%Actions)
+        Do row.%Set("priority", t.%Priority)
+        Do row.%Set("assigned_to", t.%TaskStatus.AssignedTo)
+        If $IsObject(t.%TaskStatus.Role) Do row.%Set("role", t.%TaskStatus.Role.Name)
+        Do row.%Set("time", t.%TaskStatus.TimeCreated)
+        If $IsObject(info) {
+            Do row.%Set("txn_id", info.%Get("txn_id"))
+            Do row.%Set("customer_id", info.%Get("customer_id"))
+            Do row.%Set("amount", info.%Get("amount"))
+            Do row.%Set("currency", info.%Get("currency"))
+            Do row.%Set("risk_score", info.%Get("risk_score"))
+            Do row.%Set("summary", info.%Get("summary"))
+            Do row.%Set("source", info.%Get("source"))
+        }
+        Do arr.%Push(row)
+    }
+    Quit ..WriteJSON({"reviews": (arr)})
+}
+
+/// Take a human-review action on one Workflow task: claim it for the reviewer
+/// (if still unassigned) and complete it with Approve or Reject. The
+/// Workflow Engine delivers the final TaskResponse; the Review Finalizer
+/// then settles or blocks the payment (see FinalizeBP).
+ClassMethod DecideReview() As %Status
+{
+    Set body = ..ReadBody()
+    If '$IsObject(body) Quit ..WriteError(400, "Invalid or missing JSON body")
+    Set taskId = body.%Get("task_id")
+    Set action = body.%Get("action")
+    Set reviewer = body.%Get("reviewer")
+    If reviewer = "" Set reviewer = "RiskAnalyst"
+    If taskId = "" Quit ..WriteError(400, "task_id is required")
+    Set ok = (action = "Approve") || (action = "Reject")
+    If 'ok Quit ..WriteError(400, "action must be Approve or Reject")
+
+    Set t = ##class(EnsLib.Workflow.TaskResponse).%OpenId(taskId)
+    If '$IsObject(t) Quit ..WriteError(404, "task not found: "_taskId)
+    If t.%TaskStatus.IsComplete Quit ..WriteError(409, "task already completed")
+
+    Set tSC = $$$OK
+    If t.%TaskStatus.AssignedTo = "" {
+        Set tSC = t.AssignTask(reviewer, .cnt)
+        If $$$ISERR(tSC) Quit ..WriteError(400, "claim failed (unknown reviewer '"_reviewer_"'?): "_$System.Status.GetErrorText(tSC))
+    } ElseIf t.%TaskStatus.AssignedTo '= reviewer {
+        Quit ..WriteError(409, "task is owned by "_t.%TaskStatus.AssignedTo)
+    }
+
+    Set tSC = t.CompleteTask(action)
+    If $$$ISERR(tSC) Quit ..WriteError(500, "complete failed: "_$System.Status.GetErrorText(tSC))
+
+    // Push the final decision back into the production: the Review Finalizer
+    // routes settlement/alert, appends the HUMAN audit record and resolves
+    // the review case - all visible in the message trace.
+    Set info = ""
+    Try {
+        Set info = ##class(%DynamicObject).%FromJSON(t.%Message)
+    } Catch ex {
+    }
+    Set fin = ##class(PaymentGuard.Request.ReviewFinalization).%New()
+    Set fin.TxnId = ""
+    If $IsObject(info) Set fin.TxnId = info.%Get("txn_id")
+    Set fin.CustomerId = $S($IsObject(info): info.%Get("customer_id"), 1: "")
+    Set fin.Amount = $S($IsObject(info): info.%Get("amount"), 1: 0)
+    Set fin.Currency = $S($IsObject(info): info.%Get("currency"), 1: "")
+    Set fin.Action = $Select(action = "Approve": "APPROVE", 1: "BLOCK")
+    Set fin.HumanAction = action
+    Set fin.Reviewer = t.%UserName
+    Set fin.RiskScore = $S($IsObject(info): info.%Get("risk_score"), 1: 0)
+    Set fin.Summary = $S($IsObject(info): info.%Get("summary"), 1: "")
+    Set fin.OriginSource = $S($IsObject(info): info.%Get("source"), 1: "")
+    Set fin.WorkflowTaskId = taskId
+    Set finSC = ##class(PaymentGuard.Interop.FinalizeBP).SubmitFinalization(fin)
+    If $$$ISERR(finSC) Quit ..WriteError(500, "finalization failed: "_$System.Status.GetErrorText(finSC))
+
+    Quit ..WriteJSON({"completed": (1), "task_id": (taskId), "action": (action), "reviewer": (t.%UserName), "final_action": (fin.Action)})
+}
 /// Reseed demo data. Stops the production first: wiping tables while
 /// requests are in flight poisons the shutdown state and wedges every
 /// subsequent start (ErrProductionNotShutdownCleanly).

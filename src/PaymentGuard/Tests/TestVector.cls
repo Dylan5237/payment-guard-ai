@@ -8,7 +8,8 @@ Class PaymentGuard.Tests.TestVector Extends %UnitTest.TestCase
 
 Method OnBeforeAllTests() As %Status
 {
-    Do ##class(PaymentGuard.Data.Populate).Seed(1)
+    // Clean reset: stop first - reseeding while the production runs poisons it
+    Do ##class(PaymentGuard.Util.Setup).ResetDemo()
     Quit ##class(PaymentGuard.Util.Setup).EnsureRunning()
 }
 
