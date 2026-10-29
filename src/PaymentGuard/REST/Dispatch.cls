@@ -378,7 +378,8 @@ ClassMethod ListDecisions() As %Status
     If limit > 200 Set limit = 200
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP ? TxnId, CustomerId, Amount, Action, Source, RiskScore, Confidence, ReasonCodes, Summary, Model, SessionId, PromptTokens, CompletionTokens, ToolCalls, LatencyMs, ReviewedBy, CreatedAt FROM PaymentGuard_Data.Decision ORDER BY ID DESC")
+    Set sql = "SELECT TOP ? d.TxnId, d.CustomerId, d.Amount, d.Action, d.Source, d.RiskScore, d.Confidence, d.ReasonCodes, d.Summary, d.Model, d.SessionId, d.PromptTokens, d.CompletionTokens, d.ToolCalls, d.LatencyMs, d.ReviewedBy, d.CreatedAt, t.Merchant, t.GeoCountry FROM PaymentGuard_Data.Decision d LEFT JOIN PaymentGuard_Data.""Transaction"" t ON t.TxnId = d.TxnId ORDER BY d.ID DESC"
+    Set tSC = tStmt.%Prepare(sql)
     If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
     Set tRS = tStmt.%Execute(limit)
     While tRS.%Next() {
@@ -407,6 +408,8 @@ ClassMethod ListDecisions() As %Status
         Do row.%Set("completion_tokens", tRS.%Get("CompletionTokens"))
         Do row.%Set("tool_calls", tRS.%Get("ToolCalls"))
         Do row.%Set("latency_ms", tRS.%Get("LatencyMs"))
+        Do row.%Set("merchant", tRS.%Get("Merchant"))
+        Do row.%Set("geo_country", tRS.%Get("GeoCountry"))
         Do row.%Set("reviewed_by", tRS.%Get("ReviewedBy"))
         Do row.%Set("created_at", tRS.%Get("CreatedAt"))
         Do arr.%Push(row)
@@ -565,7 +568,7 @@ ClassMethod Stats() As %Status
             Do o.%Set("source_"_tRS.%Get("Source")_"_count", tRS.%Get("Cnt"))
         }
     }
-    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(PromptTokens),0) AS PTok, COALESCE(SUM(CompletionTokens),0) AS CTok, COALESCE(AVG(LatencyMs),0) AS Lat, COALESCE(AVG(RiskScore),0) AS Risk FROM PaymentGuard_Data.Decision")
+    Set tSC = tStmt.%Prepare("SELECT COUNT(*) AS Cnt, COALESCE(SUM(PromptTokens),0) AS PTok, COALESCE(SUM(CompletionTokens),0) AS CTok, COALESCE(AVG(CASE WHEN LatencyMs > 0 THEN LatencyMs ELSE NULL END),0) AS Lat, COALESCE(AVG(RiskScore),0) AS Risk FROM PaymentGuard_Data.Decision")
     If $$$ISOK(tSC) {
         Set tRS = tStmt.%Execute()
         If tRS.%Next() {
