@@ -74,7 +74,7 @@ The production item **"PaymentGuard AI Risk Agent"** is the contest's centerpiec
 ### Decision flow detail
 
 1. **Persist** the payment attempt (`PENDING`)
-2. **Enrich** — customer, 1h/24h velocity, last 5 transactions, device reputation, merchant 30-day stats, vector-similar historical transactions
+2. **Enrich** — customer, 1h/24h velocity, last 3 transactions, device reputation, merchant 30-day stats, top-3 vector-similar historical transactions
 3. **Rules** — blacklist, failed KYC, sanctioned geo, segment caps, velocity spike → `BLOCK`; trusted + small + home + known device → `APPROVE` fast path. Everything in between is the gray zone
 4. **Agent** — gray-zone payments are sent (as `PaymentGuard.Request.AgentDecision`) to the AI Risk Agent operation; the agent may call its tools, then must answer with JSON; the answer is parsed defensively (`Util.JSON.ExtractObject`) and validated (`Util.Validator.ValidDecision`)
 5. **Route** — `APPROVE` → Settlement, `REVIEW` → human review queue (case record), `BLOCK` → fraud alert
@@ -159,6 +159,9 @@ Base: `http://localhost:8082/paymentguard/api`
 | `POST /claims` | Submit one health-insurance claim settlement (see below) |
 | `GET /transactions?limit=20` | Recent payment attempts |
 | `GET /similar?txn_id=…&limit=5` | Top semantic neighbors of a stored transaction (IRIS Vector Search, cosine similarity) |
+| `GET /trace?limit=300` | Recent `Ens.MessageHeader` hops (id, session, source, target, body class, ms timestamps) — powers the Flow replay panel |
+| `GET /messages?session=N` | Every message body of one production session — the object behind each header, serialized to JSON |
+| `GET /reasoning?session=N` | The persisted `%AI.Agent.Session` message chain (context, tool calls, final answer) |
 | `GET /decisions?limit=20` | Decision audit trail with reasons, model, tokens, latency |
 | `GET /cases?limit=20` | Human-review cases and fraud alerts |
 | `GET /stats` | Aggregates for the dashboard |
@@ -329,6 +332,16 @@ curl -s "localhost:8082/paymentguard/api/similar?txn_id=claimhist_memb_001_CATAR
 - **Sessions**: each agent decision's conversation is `%Save()`d; replay any decision with
   `##class(%AI.Agent.Session).%OpenId(<id>)`.
 - **Dashboard** shows live token spend and average agent latency next to approval metrics.
+- **Flow replay** — the dashboard's Flow panel replays any decision hop by hop over the
+  production topology with the real `Ens.MessageHeader` timings (`GET /trace`), unfolds the
+  agent's reasoning chain (`GET /reasoning`), and lets you click a topology node to read the
+  actual message bodies that passed through it (`GET /messages`).
+- **Portal deep link** — the same session opens in the Management Portal Message Viewer
+  (`EnsPortal.MessageViewer.zen?SESSIONID=…`, login `SuperUser` / `SYS`), so the replay is
+  a convenience layer over the tooling IRIS already ships.
+- **Typical latency** — rules decide in single-digit milliseconds at zero tokens; gray-zone
+  agent decisions land in ~1.4–1.9 s end to end with ~2.5k prompt tokens. A slow or hung LLM
+  is capped at 20 s and degrades to a human-review item, never wedging the pipeline.
 
 ## Testing
 
