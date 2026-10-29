@@ -46,6 +46,8 @@
 <h2>人工终审：原生 Workflow 引擎闭环</h2>
 <p>REVIEW 不是终点，最后总得有人拍板。我们没有自建队列，而是直接接入 IRIS 的<strong>原生 Workflow 引擎</strong>：每次 REVIEW 判定，业务流程会向新生产项 <strong>“PaymentGuard Human Review”</strong>（一个普通的 <code>EnsLib.Workflow.Operation</code>，开启 <code>AutoCreateRole</code>）异步发送 <code>EnsLib.Workflow.TaskRequest</code>（不设超时），任务即刻进入按角色划分的工作列表，并携带完整决策上下文和两个动作：<code>Approve</code> 与 <code>Reject</code>。</p>
 <p>分析师在仪表盘的<em>人工终审</em>面板查看未决任务（或 <code>GET /api/reviews</code>），用 <code>POST /api/reviews/decide</code>（<code>task_id</code>、<code>action</code>、<code>reviewer</code>）做裁决。端点通过 Workflow 引擎的 <code>AssignTask</code> 领取任务、<code>CompleteTask</code> 完成任务，再把 <code>ReviewFinalization</code> 请求推进 <strong>“PaymentGuard Review Finalizer”</strong> 业务流程：<strong>Approve</strong> 走结算、<strong>Reject</strong> 触发欺诈告警（只有显式批准才会动钱），同时追加一条 <code>Source = "HUMAN"</code> 的不可变决策记录（<code>ReviewedBy</code> 记录审核人），更新交易状态并结案。</p>
+<p><img style="max-width: 100%;width: 2920px;height: 456px;" src="/sites/default/files/inline-images/human-review_1793290172.png" data-entity-uuid="aebfcb92-2f91-425d-803c-4e7ad5ea97cc" data-entity-type="file" alt="仪表盘的人工终审面板：一笔 REVIEW 判定在 Workflow 引擎里生成的任务，带 AI 风险评估和 Approve / Reject 两个动作" width="2920" height="456" loading="lazy">
+</p><p>仪表盘的人工终审面板：一笔 REVIEW 判定在 Workflow 引擎里生成的待办任务，带 AI 的风险评估和 Approve / Reject 两个动作——裁决结果会回流进生产。</p>
 <p>两个设计细节值得说明：任务未决期间，Decision BP → Human Review 这一跳在消息查看器里会一直显示 in-progress——这是“会话在等人”的设计语义，不是卡死；另外此 EAP 构建里 Workflow 引擎不会回调裸 <code>OnRequest</code> 业务流程，所以终审是由裁决端点显式推进 Finalizer 的消息——一条完整可追溯的链（REST → Finalizer → Settle / Alert），而不是“魔法唤醒”。</p>
 <h2>决策回放：链路上发生了什么</h2>
 <p>替资金做决定的 Agent，光快不够，还得能审计。PaymentGuard 为每笔决策保留三层证据，全部在库内：</p>
@@ -54,8 +56,8 @@
 <li data-list-item-id="e326f107a9ec22f6363959f2eaa261ace"><strong>每一步推理</strong>——操作组件把 <code>%AI.Agent.Session</code> 持久化：Agent 看到的上下文、每次工具调用、每个结果、最终回答。</li>
 <li data-list-item-id="eeabdcad3ab7092d6d4bf19933f345aa3"><strong>每一笔成本</strong>——不可变的决策审计记录存 prompt/completion token、工具调用数、延迟、模型和会话 id。</li>
 </ul>
-<p>仪表盘的 Flow 面板把这三层拼成回放。触发任意操作，任务先排队；决策落地后，真实链路（<code>GET /api/trace</code>）按生产拓扑逐跳回放，标注真实毫秒。下面这笔就是上文的灰区支付：6 跳，全程 1.89 秒，其中 1.88 秒是 Agent 在推理（真实 DeepSeek）。Agent 决策还会在下方展开完整消息链（<code>GET /api/reasoning</code>），收尾是判定和原因代码。</p>
-<p><img style="max-width: 100%;width: 1400px;height: 1480px;" src="/sites/default/files/inline-images/flow-panel_1793265654.png" data-entity-uuid="e940f05c-8242-43a7-92db-d6f321944d69" data-entity-type="file" alt="PaymentGuard AI 的 Flow 回放面板：任务队列、按生产拓扑逐跳回放的真实 Ens.MessageHeader 链路，以及 Agent 推理链" width="1400" height="1480" loading="lazy">
+<p>仪表盘的 Flow 面板把这三层拼成回放。触发任意操作，任务先排队；决策落地后，真实链路（<code>GET /api/trace</code>）按生产拓扑逐跳回放，标注真实毫秒。下面这笔来自线上演示的灰区支付：7 跳，全程 2.47 秒，其中 2.46 秒是 Agent 在推理（真实 DeepSeek）。Agent 决策还会在下方展开完整消息链（<code>GET /api/reasoning</code>），收尾是判定和原因代码。</p>
+<p><img style="max-width: 100%;width: 1400px;height: 1478px;" src="/sites/default/files/inline-images/flow-panel_1793290188.png" data-entity-uuid="e5ff7be3-1bb3-47e0-b913-7a496a96bdd8" data-entity-type="file" alt="PaymentGuard AI 的 Flow 回放面板：任务队列、按生产拓扑逐跳回放的真实 Ens.MessageHeader 链路（含 Human Review 工作流节点），以及 Agent 推理链" width="1400" height="1478" loading="lazy">
 </p><p>点击拓扑节点，回答的是"这一跳里到底流过了什么"：<code>GET /api/messages</code> 打开这个会话的真实消息体——发给 Agent 的风险上下文（画像、速率、设备与商户情报、向量近邻、Python 先验），和带 token、延迟、会话 id 返回的答案。</p>
 <p><img style="max-width: 100%;width: 884px;height: 834px;" src="/sites/default/files/inline-images/agent-messages_1793264248.png" data-entity-uuid="117e026b-ffdf-4bc7-aac0-e49fead69b10" data-entity-type="file" alt="AI Risk Agent 节点的消息体：发给 Agent 的风险上下文 JSON，与带 token、延迟、会话 id 返回的决策 JSON" width="884" height="834" loading="lazy">
 </p><p>这些本来就是 IRIS 互操作的标准机制，所以同一个会话能深链进管理门户的 Message Viewer（<code>?SESSIONID=…</code>）——仪表盘只是给产品自带的工具加了层便捷入口：</p>
