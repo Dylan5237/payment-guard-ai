@@ -1,0 +1,178 @@
+<div class="clearfix text-formatted field field--name-body field--type-text-with-summary field--label-above">
+              <div class="field__item"><p><strong>在线体验：</strong><a href="http://43.139.159.100:8082/paymentguard/">http://43.139.159.100:8082/paymentguard/</a></p>
+<p>——仪表盘、REST API 与背后的互操作生产全程在线，灰色地带决策由 DeepSeek 实时作出。</p>
+<p><em>本文是</em><a href="https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production"><em>英文参赛文章</em></a><em>的中文版。源码：</em><a href="https://github.com/Dylan5237/payment-guard-ai"><em>github.com/Dylan5237/payment-guard-ai</em></a><em>。</em></p>
+<p><em><strong>以下是正文：</strong></em></p>
+<hr>
+<p>支付授权，本质上是个决策问题。</p>
+<p>大多数支付没什么可纠结的：老客户、熟悉的金额、常用的设备，几条确定性规则微秒级就能放行或拦下。真正难的是中间那片灰色地带——新设备、不常见的国家、比平时高出一截的金额、KYC 还没过审的客户。人工分析师的时间基本都耗在这里，而这恰恰是大模型 Agent 能帮上忙的地方——前提是它手里有真工具，查得到真数据。</p>
+<p>PaymentGuard AI 做的事就这么直接：把一个真实的 IRIS AI Hub Agent（<code>%AI.Agent</code>）当成一个业务操作，塞进一条普通的互操作生产里。Agent 不瞎猜——它通过 AI Hub 的 SQL 工具直接查支付平台自己的 IRIS 库，查完按严格的 JSON 格式给结论；剩下的路由、审计、算 token 成本，生产全接管。</p>
+<h2>混合决策：规则打头，Agent 收尾</h2>
+<p>每笔支付进生产后走三段：</p>
+<ul>
+<li data-list-item-id="e89bb9e863110994fc0ee82c3499df9d9"><strong>确定性规则先上。</strong> 制裁地区、黑名单、硬性限额、速率尖峰，命中即拦；完全可信的客户加小额加常用设备加本地，直接放行。这一段一个 token 都不花。</li>
+<li data-list-item-id="ebab32190326c669047b6bb842861866d"><strong>灰色地带才轮到 AI。</strong> 真实的 <code>%AI.Agent</code>（生产里叫 "AI Risk Agent"），带六个只读 SQL 工具：客户画像、近期交易、支付速率、设备信誉、商户统计、语义相似检索。查什么由 Agent 自己决定，最后给出 APPROVE / REVIEW / BLOCK。</li>
+<li data-list-item-id="e388a1a74eb5afb2bf744715d37425d37"><strong>AI 出错也有兜底。</strong> Agent 报错、超时、输出格式不对，支付一律降级进人工审核队列——绝不静默放行，也绝不无脑拦截。</li>
+</ul>
+<p>不管决策来自规则、Agent、mock 还是兜底路径，每一条都落成不可变的审计记录：prompt/completion token 数、工具调用次数、延迟、模型，还有可回放的 AI Hub 会话 id（<code>%AI.Agent.Session</code> 随时重放）。</p>
+<h2>演示视频</h2>
+<div class="youtube-embed">
+<iframe src="https://www.youtube.com/embed/ZcotKFBElKM?" width="640" height="360"> </iframe></div>
+<p>四分钟看完全流程：规则毫秒级出结果、零 token 成本；灰色地带交给 AI Hub Agent 和它的 SQL 工具；医保理赔场景（跨城重复报销、Agent 关联理赔、黑名单机构）；一组爆发式支付里 Agent 自己把三笔关联起来，认出账户盗用模式；最后是审计链路——token、延迟、可回放会话 id 一应俱全。</p>
+<h2>架构</h2>
+<p>请求从 PaymentGuard REST 业务服务进来，Decision 业务流程负责编排：先做数据补全（实时 SQL），再跑规则，只有灰色地带才发给 AI Hub Agent，然后按结果路由到结算、人工审核或欺诈告警。每一跳都是管理门户消息查看器里查得到的消息。</p>
+<p><img style="max-width: 100%;width: 2888px;height: 1608px;" src="/sites/default/files/inline-images/architecture.zh-CN_1793242962.png" data-entity-uuid="f0f65d4c-24c4-4e1e-9e05-aee44b9a8b46" data-entity-type="file" alt="PaymentGuard AI 系统架构：Web Gateway Sidecar 容器、IRIS 互操作生产（REST BS、Decision BP、AI Risk Agent、Settle/Review/Alert 业务操作）与带 256 维向量列的 IRIS 数据库" width="2888" height="1608" loading="lazy"></p>
+<p>一张图看全貌：Web Gateway（Apache + CSP）架在 NoPWS 的 AI EAP 容器前面；</p>
+<p>容器内是一个 IRIS ：REST BS → Decision BP → Settle / Review / Alert 三个业务操作，灰色地带交易同步咨询 AI Risk Agent，每笔交易落库时附带 256 维相似度向量。仓库里的 <a href="https://github.com/Dylan5237/payment-guard-ai/blob/main/docs/architecture.zh-CN.html">交互版架构图</a>（<code>docs/architecture.zh-CN.html</code>）支持缩放、关系追踪与节点源码跳转。</p>
+<p>整个作品的核心是生产里那个 <strong>"PaymentGuard AI Risk Agent"</strong>：一个标准的 <code>Ens.BusinessOperation</code>，在进程内把 AI Hub Agent 跑起来。对业务流程来说，调 AI 和调其他任何操作没有区别——一样排队、可追溯、可重试；操作内部则负责运行 <code>%AI.Agent</code>、保存会话、把 token 用量带回消息流。</p>
+<p><img style="max-width: 100%;width: 1390px;height: 489px;" src="/sites/default/files/inline-images/agent-decision_1793238863.png" data-entity-uuid="d2b82632-eba1-4ebc-aab5-5b5c69d45cc3" data-entity-type="file" alt="真实灰色地带决策：Agent 查证实时数据后按严格 JSON 作答" width="1390" height="489" loading="lazy"></p>
+<p>上图中是一次真实的灰色地带决策（截自演示视频）：Agent 查完实时数据，用严格 JSON 作答——action、risk_score、有据可查的 reasons，加上 token 和延迟。</p>
+<h2>Agent 说明</h2>
+<p><code>PaymentGuard.Agent.RiskAgent</code> 继承 <code>%AI.Agent</code>：</p>
+<ul>
+<li data-list-item-id="e5e978e2435e19270b5d29340f4295ad9"><strong>INSTRUCTIONS</strong>：支付风控审核员人设，决策策略写得明明白白——多信号汇拢才 BLOCK，异常但说得通给 REVIEW，与既有画像一致才 APPROVE；输出必须是单个 JSON 对象：<code>action</code>、<code>risk_score</code>、<code>confidence</code>、snake_case 的 <code>reasons[]</code>，加一段易懂的 <code>summary</code>。</li>
+<li data-list-item-id="e95a4785e45a15c75658b65783dc0737c"><strong>工具</strong>：六个只读工具（<code>%AI.Tool</code> 方法），全是对生产自有表的实时 SQL——客户画像、近期交易、速率、设备、商户，加上语义相似检索。查哪个、查几次，Agent 自己定。</li>
+<li data-list-item-id="e1948f4546b7f6cbdc73037c6560d7436"><strong>换模型不用改代码</strong>：默认 DeepSeek（<code>.env</code> 里配 <code>AI_PROVIDER</code> / <code>AI_MODEL</code> / <code>&lt;PROVIDER&gt;_API_KEY</code>），AI Hub 支持的供应商随便换。</li>
+</ul>
+<p>对 Agent 的输出，决策流程按"不可靠依赖"对待：裸 JSON、围栏 JSON、正文里夹的 JSON，三种形式都做防御性解析，按契约校验，任何一步失败都带着原因码降级到人工审核——AI 出问题可以接受，但绝不静默放行，也不会误伤正常交易。</p>
+<h2>真实决策示意</h2>
+<p>一次 12 笔的演示爆发，分布相当理想：7 笔 APPROVE（规则 2、Agent 5）、4 笔 REVIEW、1 笔 BLOCK。挑两条真实运行的结果：</p>
+<p><img style="max-width: 100%;width: 1560px;height: 940px;" src="/sites/default/files/inline-images/dashboard_1793238901.png" data-entity-uuid="cde30250-9bf9-4928-ae62-3232d6db7736" data-entity-type="file" alt="实时决策控制台：规则毫秒级出结果，Agent 处理灰色地带，每条决策带来源、风险分、token 和延迟" width="1560" height="940" loading="lazy"></p>
+<blockquote><p><strong>BLOCK，风险分 88</strong>——"9 秒内连刷三笔高额电商支付，来自香港和阿联酋，设备今天才第一次出现；而 Alice Tanaka 平时是美国的小额网购，一个月也就 900 美元上下——典型的账户被盗后的卡片测试（card testing）攻击。" reasons：<code>burst_velocity_3_txns_9s</code>、<code>geo_mismatch_hk_ae_vs_us_home</code>、<code>amount_above_baseline_710_vs_avg_monthly_900</code>、<code>brand_new_device_first_seen_today</code></p>
+</blockquote>
+<blockquote><p><strong>REVIEW，风险分 45</strong>——"这位客户的历史消费都在德国，买的是 AWS、西门子这类电商服务；这笔却是新设备在土耳其一家奢侈品腕表商户刷卡。金额不大，也没有连刷……说重了不至于，直接放也不敢——转人工。"</p>
+</blockquote>
+<p>第一条是亮点：Agent 用速率工具把同一波爆发里的三笔独立支付关联了起来，还点明了欺诈模式。每条决策记录都带 token 数、工具调用数、延迟、模型和会话 id——想复盘，<code>##class(%AI.Agent.Session).%OpenId(id)</code> 一键回放。实测每次灰色地带决策约 3,000 prompt + 350 completion token、2–3 秒；规则和快速路径，零成本。</p>
+<h2>决策回放：链路上发生了什么</h2>
+<p>替资金做决定的 Agent，光快不够，还得能审计。PaymentGuard 为每笔决策保留三层证据，全部在库内：</p>
+<ul>
+<li data-list-item-id="ed0b2015a2438d1045737c7bbc5b9dc4b"><strong>每一跳</strong>——<code>Ens.MessageHeader</code> 记录消息在 REST → 决策进程 → Agent → 结算/人工/告警 之间的每次流转，带时间戳和消息体引用。</li>
+<li data-list-item-id="e326f107a9ec22f6363959f2eaa261ace"><strong>每一步推理</strong>——操作组件把 <code>%AI.Agent.Session</code> 持久化：Agent 看到的上下文、每次工具调用、每个结果、最终回答。</li>
+<li data-list-item-id="eeabdcad3ab7092d6d4bf19933f345aa3"><strong>每一笔成本</strong>——不可变的决策审计记录存 prompt/completion token、工具调用数、延迟、模型和会话 id。</li>
+</ul>
+<p>仪表盘的 Flow 面板把这三层拼成回放。触发任意操作，任务先排队；决策落地后，真实链路（<code>GET /api/trace</code>）按生产拓扑逐跳回放，标注真实毫秒。下面这笔就是上文的灰区支付：6 跳，全程 1.89 秒，其中 1.88 秒是 Agent 在推理（真实 DeepSeek）。Agent 决策还会在下方展开完整消息链（<code>GET /api/reasoning</code>），收尾是判定和原因代码。</p>
+<p><img src="/sites/default/files/inline-images/flow-panel_1793264219.png" data-entity-uuid="d4932acd-18cf-46f2-a1f6-b65f6d32e7b7" data-entity-type="file" alt="PaymentGuard AI 的 Flow 回放面板：任务队列、按生产拓扑逐跳回放的真实 Ens.MessageHeader 链路，以及 Agent 推理链" style="max-width: 100%;width: 1052px;height: 1109px;" width="1052" height="1109" loading="lazy">
+</p><p>点击拓扑节点，回答的是"这一跳里到底流过了什么"：<code>GET /api/messages</code> 打开这个会话的真实消息体——发给 Agent 的风险上下文（画像、速率、设备与商户情报、向量近邻、Python 先验），和带 token、延迟、会话 id 返回的答案。</p>
+<p><img src="/sites/default/files/inline-images/agent-messages_1793264248.png" data-entity-uuid="117e026b-ffdf-4bc7-aac0-e49fead69b10" data-entity-type="file" alt="AI Risk Agent 节点的消息体：发给 Agent 的风险上下文 JSON，与带 token、延迟、会话 id 返回的决策 JSON" style="max-width: 100%;width: 884px;height: 834px;" width="884" height="834" loading="lazy">
+</p><p>这些本来就是 IRIS 互操作的标准机制，所以同一个会话能深链进管理门户的 Message Viewer（<code>?SESSIONID=…</code>）——仪表盘只是给产品自带的工具加了层便捷入口：</p>
+<p><img src="/sites/default/files/inline-images/message-viewer_1793264295.png" data-entity-uuid="40df3403-8846-421d-8009-2093d01216eb" data-entity-type="file" alt="从仪表盘深链打开的 IRIS 管理门户 Message Viewer，按会话过滤的消息链路" style="max-width: 100%;width: 2160px;height: 1500px;" width="2160" height="1500" loading="lazy">
+</p><p>上线运行后的两点补充。<strong>延迟</strong>：把上下文瘦身（约 2.5k prompt token；历史与向量近邻各取 top-3）之后，灰区决策端到端 1.4–1.9 秒，规则路径保持个位数毫秒、零 token。<strong>失败兜底</strong>：Agent 调用 20 秒封顶——LLM 挂起时降级为人工审核队列项，不会卡死管道。AI 故障不挡收入，也绝不静默放行。</p>
+<h2>医保理赔案例：同一引擎注入行业规则</h2>
+<p>医保理赔结算说穿了就是“带行话”的支付场景：参保人是客户，医院/机构是商户，理赔单上多出 <code>procedure</code>（术式）、<code>diagnosis</code>（诊断）和 <code>city</code>（城市）三个字段。这些字段原样跑完整条管线——规则、补全、Agent 上下文、审计——生产就这么学会了第二个反欺诈领域。</p>
+<p>规则引擎加了两条确定性规则：同一参保人 7 天内在<strong>另一座城市</strong>结算同一术式，直接拦（<code>DUPLICATE_CROSS_CITY_CLAIM</code>）；机构侧复用商户黑名单（<code>BLACKLISTED_MERCHANT</code>）。Agent 的指令里写明了理赔词汇表和重复报销模式的识别规则，灰色地带理赔会和该参保人的结算历史比对。</p>
+<p>演示场景说明：参保人 <code>memb_001</code> 三天前在上海瑞金医院全额结算过一台白内障手术（12,800 元）。三笔理赔（<code>POST /api/claims</code>）、三种机制。</p>
+<p>同一台手术改在北京报——规则毫秒级出结果，零 token：</p>
+<pre><code class="language-plaintext">curl -s -X POST localhost:8082/paymentguard/api/claims \
+  -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Beijing Union Medical College Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Beijing","currency":"CNY"}'</code></pre><blockquote><p><strong>BLOCK · 规则</strong>——<code>DUPLICATE_CROSS_CITY_CLAIM</code>——"参保人 7 天内已在上海结算过术式 CATARACT_SURGERY（结算单 claimhist_memb_001_CATARACT_SURGERY_3，2026-10-25）——跨城重复报销"</p>
+</blockquote>
+<p>还是那台手术回到上海报——同城，规则不响。灰色地带交给 Agent，它把已结算的手术和当天被拦的北京尝试关联了起来：</p>
+<pre><code class="language-plaintext">curl -s -X POST localhost:8082/paymentguard/api/claims \
+  -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Shanghai Renji Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Shanghai","currency":"CNY"}'</code></pre><blockquote><p><strong>BLOCK · AGENT（deepseek-chat）</strong>，风险分 92，置信度 0.9——reasons <code>duplicate_reimbursement</code>、<code>same_procedure_multiple_cities</code>、<code>same_procedure_settled_3_days_ago</code>、<code>prior_attempt_blocked_today</code>、<code>amount_matches_duplicate_exactly</code>——"张伟已于 2026-10-25 在上海瑞金医院结算过 CATARACT_SURGERY（H25.9，12,800 元）；今天已有一笔同样的理赔在北京协和医院被拦，现在同一术式、同一金额又在上海出现。这是跨机构/跨城市的重复报销，应拒付并上报。"——1,985 prompt + 154 completion token，1.8 秒。</p>
+</blockquote>
+<p>黑名单机构的理赔根本到不了大模型：<code>BLACKLISTED_MERCHANT</code>，毫秒级拦截，零 token。种子数据自带四名参保人、四家医院和血液透析/手术/影像历史；%UnitTest 套件随医保场景长到 24——理赔端点映射、跨城重复规则、机构黑名单、Agent 关联理赔流全覆盖。</p>
+<h2>相似交易检索：Embedded Python 的 IRIS 向量搜索</h2>
+<p>决策链路里的一个能力是"记忆"——<em>这笔支付像不像我们见过的某一笔</em>。两个 Embedded Python 组件负责这一能力，使用Python方法实现、只用标准库——不装包、不调外部 API：</p>
+<ul>
+<li data-list-item-id="e30904182f25e3beec3e9e8c8a9a54e4e"><strong>逻辑回归风险先验</strong>——<code>PaymentGuard.Rules.PyModel</code> 离线给补全上下文打分（金额对基线、速率、设备共享、地理错配、KYC），以 <code>ml_model</code> 身份进 Agent 上下文：只作参考信号，不作为最终裁定——Python 不可用时主流程照跑。</li>
+<li data-list-item-id="e7d2b230ea049f13a0066def68b78fbdb"><strong>向量相似交易</strong>——<code>PaymentGuard.Vector.Embedder</code> 把交易的结构化特征（术式、诊断、机构、城市、渠道、币种、金额档）哈希成 256 维 L2 归一化向量。确定性、离线：同样的输入永远得到同一个向量，查询向量可以直接从行的特征复算，根本不用把存量向量读回来。</li>
+</ul>
+<p>生产落库的每笔交易都带 <code>VECTOR(double, 256)</code> 向量列，<code>VECTOR_COSINE</code> top-K 检索供两条路径使用：灰色地带风险上下文里预计算好的 <code>similar_transactions</code> 段，加上第六个 Agent 工具 <code>SearchSimilarTransactions</code>——审核员可以在推理中途随时检索语义近邻。人类也有同款视图，<code>GET /api/similar?txn_id=…</code>：</p>
+<pre><code class="language-plaintext">curl -s "localhost:8082/paymentguard/api/similar?txn_id=claimhist_memb_001_CATARACT_SURGERY_3&amp;limit=3"
+
+{
+  "query_txn_id": "claimhist_memb_001_CATARACT_SURGERY_3",
+  "results": [
+    {"txn_id": "…北京白内障尝试…", "procedure": "CATARACT_SURGERY", "city": "Beijing", "similarity": 0.818},
+    {"txn_id": "…MRI_BRAIN 理赔…", "procedure": "MRI_BRAIN", "city": "Shanghai", "similarity": 0.307}
+  ]
+}</code></pre><p>仪表盘把同一个查询做成了可视化：点决策流任意一行，语义近邻带相似度条出现在下方——连刷的孪生交易 1.000，无关的电子消费 0.353：</p>
+<p><img src="/sites/default/files/inline-images/vector-neighbors_1793264328.png" data-entity-uuid="71977973-76f9-4e1c-b9e7-d63a446bda30" data-entity-type="file" alt="向量相似交易面板：连刷的孪生交易相似度 1.000，无关电子消费 0.353——IRIS 向量检索对 256 维 Embedded Python 嵌入做余弦" style="max-width: 100%;width: 906px;height: 632px;" width="906" height="632" loading="lazy">
+</p><p>重复报销模式直接呈现为一张相似度排行榜：异城同术式 0.82，不相关的影像检查 0.31。Agent 也会引用这份证据——一笔同城的白内障理赔（属于灰色地带，跨城规则不响）回来时，既关联上了已结算的手术，也关联上了几十秒前刚被拦的同一笔：</p>
+<blockquote><p><strong>BLOCK · AGENT（deepseek-chat）</strong>，风险分 88，置信度 0.85——reasons <code>duplicate_reimbursement</code>、<code>same_procedure_settled_3_days_ago</code>、<code>same_procedure_attempted_in_second_city_same_hour</code>、<code>provider_hopping_beijing_shanghai</code>、<code>identical_amount_and_diagnosis_h25_9</code>——"memb_001 已于 2026-10-25 在上海瑞金结算过 CATARACT_SURGERY（H25.9，12,800 元）；本请求之前 30 秒，同一笔理赔刚在北京协和医院被拦。两天内跨两城重复报销同一术式——拦截，并转审核员核查前一笔是否需要作废。"——5,353 prompt + 313 completion token，3.8 秒。</p>
+</blockquote>
+<p>%UnitTest 套件随向量检索长到 30：嵌入确定性与单位范数、种子理赔检索、上下文注入、自排除、每笔落库交易的端到端嵌入。</p>
+<h2>NoPWS：这个 EAP 构建里没有 Web 服务器</h2>
+<p>2026.3 AI Hub EAP 是 NoPWS 构建——52773 私有 Web 服务器整个被砍掉，容器里没有门户、没有 REST，任何 HTTP 都没有。所以 PaymentGuard 自带一套标准的 InterSystems <strong>Web Gateway Sidecar 容器</strong>。踩过的三个坑，记录如下：</p>
+<ul>
+<li data-list-item-id="ee6aee90b6232c5b18bc00e901afcb831"><strong>凭据要写进 CSP.ini。</strong> 这版网关不认 <code>ISC_CSP_IRIS_*</code> 那套环境变量，<code>[LOCAL]</code> 段里得写 <code>Username=CSPSystem</code> / <code>Password=SYS</code>；EAP 构建又不再自带 CSPSystem 用户——得自己建用户、开 <code>%Service_WebGateway</code>。</li>
+<li data-list-item-id="efbfb522289693a2244f66c1c8fd7b36d"><strong>Apache 模块只认扩展名。</strong><code>CSPFileTypes csp cls zen cxw</code>——不带扩展名的 REST URL 根本到不了 IRIS。我们在栈内做重写，把这些 URL 一一对应地转到 <code>.csp</code> 路由（mod_rewrite + 双份 UrlMap），<code>POST /payments</code> 这样的地址才能原样工作。</li>
+<li data-list-item-id="e59f4c7a06292184c519b2eaab1498c86"><strong>匿名访问要授权。</strong> 演示环境不开鉴权，就得把 Web 应用角色授给 UnknownUser——不然每个请求都在半路以 <code>&lt;PROTECT&gt;</code>/403 挂掉。</li>
+</ul>
+<p>仪表盘是纯静态 HTML，Apache 直接伺服（挂载的 <code>web/</code> 目录），前端轮询 API——没有构建步骤，不用 npm。</p>
+<h2>部署与分发</h2>
+<p>整个栈全容器化——<code>docker compose up -d --build</code> 一条命令拉起 IRIS（AI Hub EAP community 镜像）加上文说的 Web Gateway 。</p>
+<p>源码和一键启动：<a href="https://github.com/Dylan5237/payment-guard-ai">github.com/Dylan5237/payment-guard-ai</a>。</p>
+<p><strong>在线演示：</strong><a href="http://43.139.159.100:8082/paymentguard/"><strong>43.139.159.100:8082/paymentguard</strong></a>——仪表盘、REST API（<code>/paymentguard/api</code>）和背后的生产都在线上跑，DeepSeek live 模式实时决策；</p>
+<p>管理门户 <code>43.139.159.100:8082/csp/sys/UtilHome.csp</code>（<code>SuperUser</code> / <code>SYS</code>）。</p>
+<p>也按 IPM 包交付（模块名 <code>paymentguard</code>）：<code>zpm "install paymentguard"</code> 一装即用，类、REST 应用、仪表盘全在里面；</p>
+<p>Open Exchange 上就是 PaymentGuard AI 本体。</p>
+<p>demo 有mock 模式：mock 模式下端到端可跑，确定性引擎用同样的 JSON 契约作答——流程、仪表盘、审计链路、整套 %UnitTest（30 个测试）全部离线可用、全绿。</p>
+<h2>下一步计划</h2>
+<ul>
+<li data-list-item-id="eaa67d44ee681642879e77e3d05bb075b">再做一个争议处理 Agent，配受限的写权限工具（挂起、调单），专门消化 REVIEW 队列；</li>
+<li data-list-item-id="e14f9e9478f1f7c44ee796132b78c58a8">给 Agent 调用加 OpenTelemetry span 导出——%AI 栈本来就 OTel-ready，审计表先交了，span 随后就到；</li>
+<li data-list-item-id="e1122ff5fc31718578b698190463fe114">拿分析师的历史处置记录做 RAG，让 Agent 越用越懂行。</li>
+</ul>
+<hr>
+<p><em>PaymentGuard AI，基于 InterSystems IRIS 2026.3 AI Hub 早期访问构建的开源演示。感谢 AI Hub 团队的 EAP 计划和 %AI SDK——解决了容器里缺失 Web 服务器的问题之后看得更分明：Agent 和互操作生产之间的这条边界，设计得真漂亮。</em></p>
+</div>
+          </div>
+
+  </div>
+  </div>    
+   
+
+ 
+<div class="line-blue flex-block">
+        <div class="blue-text-doc">
+            <a href="https://openexchange.intersystems.com/package/PaymentGuard-AI" target="_blank"><b>在 InterSystems Open Exchange 上检查相关应用程序</b></a>
+        </div>
+      </div>
+
+  
+ 
+
+ 
+</div>
+
+<div class="node-more-actions">
+
+ 
+
+<div class="content-box"><div class="comment-discussion"><span class="count-discussion">讨论 (<span>0</span>)</span><span class="views_count_subscribe post-actions"><a href="/intsys_modal/login" class="unlogged inactive use-ajax" title="订阅"><span class="teaser-small-icon subscriber-icon"></span>0</a></span></div>
+<div class="panel-body"><a href="/intsys_modal/login" class="texareanoactive use-ajax" >登录或注册以继续</a>
+			
+			</div>
+        </div>
+
+ 
+ 
+
+
+ 
+  <div class="node-comments" >
+  <div id="comments"></div>
+    <section id="node-post-field-comments" class="field field--name-field-comments field--type-comment field--label-above comment-wrapper">
+
+  
+
+
+  
+
+  
+
+
+</section>
+
+  </div>
+ 
+</div>
+
+
+</div>
+</div>
+
+
+
