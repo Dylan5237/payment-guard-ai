@@ -75,6 +75,86 @@
   #busybar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 99; display: none; overflow: hidden; background: rgba(79,142,247,.15); }
   #busybar i { display: block; height: 100%; width: 38%; background: linear-gradient(90deg, var(--accent), var(--ai)); border-radius: 3px; animation: slide 1.1s ease-in-out infinite; }
   @keyframes slide { 0% { margin-left: -40%; } 100% { margin-left: 105%; } }
+  /* ── Flow replay panel ─────────────────────────── */
+  :root { --f0:#0b0b0a; --f1:#151515; --f2:#1a1a19; --f3:#20201e; --fmuted:#9a9891; }
+  .tabnum { font-variant-numeric: tabular-nums; }
+  #flowfab {
+    position: fixed; right: 22px; bottom: 62px; z-index: 60;
+    display: flex; align-items: center; gap: 7px;
+    background: var(--f2); border: 0; border-radius: 999px;
+    padding: 11px 17px; color: #ecebe8; font-weight: 560; font-size: 13px;
+    box-shadow: 0 8px 28px rgba(0,0,0,.5); cursor: pointer;
+    transition: background .25s ease, transform .25s cubic-bezier(.215,.61,.355,1);
+  }
+  #flowfab:hover { background: var(--f3); transform: translateY(-1px); }
+  #flowfab .cnt { color: var(--ai); font-weight: 640; }
+  #flowfab.running::after {
+    content: ""; position: absolute; inset: -3px; border-radius: 999px;
+    border: 1.5px solid rgba(155,108,243,.55);
+    animation: fabpulse 1.6s cubic-bezier(.215,.61,.355,1) infinite;
+  }
+  @keyframes fabpulse { 0% { transform: scale(.94); opacity: .9; } 70% { transform: scale(1.16); opacity: 0; } 100% { opacity: 0; } }
+  #flowpanel {
+    position: fixed; right: 22px; bottom: 118px; z-index: 59;
+    width: min(700px, calc(100vw - 28px)); max-height: min(78vh, 760px);
+    background: var(--f1); border-radius: 18px; overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 28px 70px rgba(0,0,0,.58);
+    opacity: 0; transform: translateY(16px) scale(.97); pointer-events: none;
+    transition: opacity .38s cubic-bezier(.215,.61,.355,1), transform .38s cubic-bezier(.215,.61,.355,1);
+    font-weight: 360;
+  }
+  #flowpanel.open { opacity: 1; transform: none; pointer-events: auto; }
+  .fp-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; background: var(--f2); }
+  .fp-title { font-size: 13.5px; font-weight: 600; letter-spacing: .2px; }
+  .fp-sub { font-size: 11px; color: var(--fmuted); margin-top: 2px; }
+  #flowclose { background: transparent; color: var(--fmuted); font-size: 15px; padding: 4px 9px; margin-left: auto; }
+  #flowclose:hover { color: #ecebe8; }
+  .fp-body { padding: 12px 14px 16px; overflow-y: auto; }
+  #topo { width: 100%; height: auto; display: block; background: var(--f0); border-radius: 12px; }
+  #topo .node rect { fill: var(--f2); transition: fill .3s ease; }
+  #topo .node { transform-box: fill-box; transform-origin: center; }
+  #topo .node.hit { animation: nodehit .55s cubic-bezier(.34,1.56,.64,1); }
+  #topo .node.v-APPROVE rect, #topo .node.v-ok rect { fill: rgba(46,204,143,.16); }
+  #topo .node.v-REVIEW rect { fill: rgba(245,166,35,.16); }
+  #topo .node.v-BLOCK rect { fill: rgba(244,84,124,.16); }
+  #topo .node.v-ai rect { fill: rgba(155,108,243,.2); }
+  @keyframes nodehit { 0% { transform: scale(1); } 38% { transform: scale(1.07); } 100% { transform: scale(1); } }
+  #topo .nt { fill: #ecebe8; font-size: 11px; font-weight: 560; }
+  #topo .ns { fill: #8b8982; font-size: 8.5px; }
+  #topo .edge path { stroke: #2c2c2a; stroke-width: 1.5; fill: none; transition: stroke .35s ease; }
+  #topo .edge.on path { stroke: var(--accent); }
+  #topo .edge.on.ai path { stroke: var(--ai); }
+  #topo .mslab { fill: var(--fmuted); font-size: 9px; font-weight: 560; font-variant-numeric: tabular-nums; transition: opacity .5s; }
+  .fp-hint { font-size: 11.5px; color: var(--fmuted); margin: 9px 4px 0; text-wrap: pretty; }
+  .fp-h { font-size: 11px; letter-spacing: 1px; color: var(--fmuted); text-transform: uppercase; margin: 15px 2px 1px; font-weight: 560; }
+  .ftask {
+    display: flex; align-items: center; gap: 10px; background: var(--f2); border-radius: 10px;
+    padding: 9px 12px; margin-top: 8px; cursor: pointer; transition: background .2s ease;
+  }
+  .ftask:hover, .ftask.sel { background: var(--f3); }
+  .ftask .tspin { width: 12px; height: 12px; border: 2px solid #3a3a37; border-top-color: var(--ai); border-radius: 50%; animation: rot .7s linear infinite; flex: none; }
+  .ftask .tdone { color: var(--ok); font-weight: 700; animation: popin .38s cubic-bezier(.34,1.56,.64,1); }
+  @keyframes popin { 0% { transform: scale(.4); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .ftask .tk { font-size: 12px; color: #d7d6d1; }
+  .ftask .tms { color: #8b8982; font-size: 11px; margin-left: auto; }
+  .acc { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .42s cubic-bezier(.215,.61,.355,1); }
+  .acc > div { overflow: hidden; min-height: 0; }
+  .acc.open { grid-template-rows: 1fr; }
+  .rmsg { background: var(--f2); border-radius: 10px; padding: 8px 11px; margin-top: 6px; }
+  .rmsg .role { font-size: 10px; font-weight: 640; letter-spacing: .8px; text-transform: uppercase; }
+  .role.user { color: var(--accent); } .role.assistant { color: var(--ai); }
+  .role.tool { color: var(--warn); } .role.system { color: #8b8982; }
+  .rmsg .body { font-size: 11.5px; color: #c9c8c2; text-wrap: pretty; word-break: break-word; margin-top: 3px; line-height: 1.55; }
+  .verdict-line { font-size: 13.5px; font-weight: 600; margin-top: 10px; }
+  .verdict-line.v-BLOCK { color: var(--bad); } .verdict-line.v-REVIEW { color: var(--warn); } .verdict-line.v-APPROVE { color: var(--ok); }
+  .tchar { opacity: 0; filter: blur(6px); display: inline-block;
+    transition: filter 90ms cubic-bezier(.215,.61,.355,1), opacity 90ms cubic-bezier(.215,.61,.355,1); }
+  .tchar.on { opacity: 1; filter: blur(0); }
+  .rchip { display: inline-block; background: var(--f3); border-radius: 6px; padding: 2px 8px;
+    font-size: 10.5px; color: #c9c8c2; margin: 4px 5px 0 0; opacity: 0;
+    animation: chipin .34s cubic-bezier(.34,1.56,.64,1) forwards; }
+  @keyframes chipin { 0% { transform: scale(.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
   footer { margin-top: 16px; color: var(--muted); font-size: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
   footer a { color: var(--accent); text-decoration: none; }
   .empty { padding: 22px 16px; color: var(--muted); text-align: center; }
@@ -147,6 +227,46 @@
   <span>API: <a href="/paymentguard/api/health" target="_blank">/paymentguard/api</a></span>
 </footer>
 <div id="busybar"><i></i></div>
+<button id="flowfab" aria-label="Flow replay">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="vertical-align:-0.125em"><circle cx="4" cy="12" r="2.4" fill="#4f8ef7"/><circle cx="12" cy="5" r="2.4" fill="#9b6cf3"/><circle cx="12" cy="19" r="2.4" fill="#9b6cf3"/><circle cx="20" cy="12" r="2.4" fill="#2ecc8f"/><path d="M6 11 10 6.4M6 13 10 17.6M14 5.6 18 10.4M14 18.4 18 13.6" stroke="#4a4a46" stroke-width="1.4"/></svg>
+  Flow <span class="cnt tabnum" id="fabcnt"></span>
+</button>
+<section id="flowpanel">
+  <div class="fp-head">
+    <div>
+      <div class="fp-title">Flow replay</div>
+      <div class="fp-sub">real message hops from <span class="mono">Ens.MessageHeader</span> — what actually happened inside the IRIS production</div>
+    </div>
+    <button id="flowclose" aria-label="Close">&#10005;</button>
+  </div>
+  <div class="fp-body">
+    <svg id="topo" viewBox="0 0 640 248">
+      <g class="edge" data-edge="rest-bp"><path d="M104,124 L158,124"/></g>
+      <g class="edge" data-edge="bp-rules"><path d="M276,110 C298,100 298,50 316,42"/></g>
+      <g class="edge" data-edge="bp-agent"><path d="M276,138 C298,148 298,178 316,186"/></g>
+      <g class="edge" data-edge="bp-settle"><path d="M276,104 C380,66 420,46 486,44"/></g>
+      <g class="edge" data-edge="bp-review"><path d="M276,124 L486,125"/></g>
+      <g class="edge" data-edge="bp-alert"><path d="M276,144 C380,184 420,206 486,206"/></g>
+      <g class="node" data-node="rest"><rect x="12" y="102" width="92" height="44" rx="9"/><text class="nt" x="58" y="120" text-anchor="middle">REST BS</text><text class="ns" x="58" y="134" text-anchor="middle">payment in</text></g>
+      <g class="node" data-node="bp"><rect x="158" y="94" width="118" height="60" rx="10"/><text class="nt" x="217" y="116" text-anchor="middle">Decision BP</text><text class="ns" x="217" y="130" text-anchor="middle">enrich &middot; rules &middot; route</text><text class="ns" x="217" y="142" text-anchor="middle">audit record</text></g>
+      <g class="node" data-node="rules"><rect x="316" y="16" width="104" height="40" rx="8"/><text class="nt" x="368" y="33" text-anchor="middle">Rule Engine</text><text class="ns" x="368" y="46" text-anchor="middle">deterministic &middot; 0 tokens</text></g>
+      <g class="node" data-node="agent"><rect x="316" y="160" width="118" height="52" rx="8"/><text class="nt" x="375" y="179" text-anchor="middle">AI Risk Agent</text><text class="ns" x="375" y="192" text-anchor="middle">DeepSeek &middot; 6 SQL+vector tools</text><text class="ns" x="375" y="203" text-anchor="middle">vector search evidence</text></g>
+      <g class="node" data-node="settle"><rect x="486" y="26" width="124" height="36" rx="8"/><text class="nt" x="548" y="48" text-anchor="middle">Settlement BO</text></g>
+      <g class="node" data-node="review"><rect x="486" y="107" width="124" height="36" rx="8"/><text class="nt" x="548" y="129" text-anchor="middle">Review Queue BO</text></g>
+      <g class="node" data-node="alert"><rect x="486" y="188" width="124" height="36" rx="8"/><text class="nt" x="548" y="210" text-anchor="middle">Fraud Alert BO</text></g>
+      <circle id="flowdot" r="4" style="opacity:0"/>
+      <text id="mslab" class="mslab" style="opacity:0"></text>
+    </svg>
+    <div class="fp-hint" id="fp-hint">Trigger any action — its real path through the production replays here, hop by hop with real timings from the message trace.</div>
+    <div class="fp-h">Task queue</div>
+    <div id="flowtasks"></div>
+    <div class="acc" id="reasonwrap"><div>
+      <div class="fp-h" id="rhead">AI reasoning</div>
+      <div id="rmsgs"></div>
+      <div id="rverdict"></div>
+    </div></div>
+  </div>
+</section>
 <div id="toast"></div>
 
 <script>
@@ -258,18 +378,225 @@ function hook(id, fn) {
   });
 }
 
+// ── Flow replay: task queue + real trace from Ens.MessageHeader ──────
+const NODE_OF = { "PaymentGuard REST": "rest", "PaymentGuard Decision": "bp", "PaymentGuard AI Risk Agent": "agent", "PaymentGuard Settlement": "settle", "PaymentGuard Review Queue": "review", "PaymentGuard Fraud Alerts": "alert" };
+const EDGE_FROM = { "rest-bp": "rest", "bp-agent": "bp", "bp-rules": "bp", "bp-settle": "bp", "bp-review": "bp", "bp-alert": "bp" };
+const OUTCOME_NODE = { APPROVE: "settle", REVIEW: "review", BLOCK: "alert" };
+const HOP_COLOR = { agent: "#9b6cf3", settle: "#2ecc8f", review: "#f5a623", alert: "#f4547c" };
+const srvMs = t => Date.parse(String(t).replace(" ", "T") + "Z");
+
+$("flowfab").addEventListener("click", () => $("flowpanel").classList.toggle("open"));
+$("flowclose").addEventListener("click", () => $("flowpanel").classList.remove("open"));
+
+let taskSeq = 0, dotRAF = 0, replayT = [], idleInt = 0;
+const tasks = [];
+
+function fabUpdate() {
+  const running = tasks.filter(t => !t.done).length;
+  $("fabcnt").textContent = running || "";
+  $("flowfab").classList.toggle("running", running > 0);
+  if (!running && idleInt) { clearInterval(idleInt); idleInt = 0; $("flowdot").style.opacity = 0; }
+}
+function idleStart() {
+  if (idleInt) return;
+  idleInt = setInterval(() => {
+    runDot("rest-bp", false, "rgba(79,142,247,.85)");
+    hitNode("bp");
+  }, 1100);
+}
+function addTask(label) {
+  const t = { id: ++taskSeq, label, t0: Date.now(), hops: null, session: null, info: null, done: false };
+  const el = document.createElement("div");
+  el.className = "ftask";
+  el.innerHTML = '<span class="tspin"></span><span class="tk">' + esc(label) + '</span><span class="tbadge"></span><span class="tms tabnum">0.0s</span>';
+  el.addEventListener("click", () => selectTask(t));
+  $("flowtasks").prepend(el);
+  el.style.opacity = 0;
+  requestAnimationFrame(() => { el.style.transition = "opacity .34s cubic-bezier(.215,.61,.355,1)"; el.style.opacity = 1; });
+  t.el = el;
+  t.timer = setInterval(() => { el.querySelector(".tms").textContent = ((Date.now() - t.t0) / 1000).toFixed(1) + "s"; }, 100);
+  tasks.push(t);
+  fabUpdate();
+  $("flowpanel").classList.add("open");
+  idleStart();
+  return t;
+}
+async function finishTask(t, info) {
+  t.done = true; t.info = info;
+  clearInterval(t.timer);
+  t.el.querySelector(".tspin").outerHTML = '<span class="tdone">&#10003;</span>';
+  setTimeout(() => { const d = t.el.querySelector(".tdone"); if (d) { d.style.transition = "opacity .6s"; d.style.opacity = .35; } }, 2500);
+  const b = t.el.querySelector(".tbadge");
+  if (info.burst) b.innerHTML = '<span class="chip AGENT">' + (info.count || 8) + ' decided</span>';
+  else if (info.verdict) b.innerHTML = '<span class="badge ' + info.verdict + '">' + info.verdict + '</span> <span class="chip ' + (info.source || "") + '">' + info.source + "</span>";
+  t.session = info.session || null;
+  fabUpdate();
+  await captureTrace(t, info);
+  selectTask(t);
+}
+async function captureTrace(t, info) {
+  try {
+    const r = await (await fetch(API + "/trace?limit=300")).json();
+    const off = srvMs(r.now) - Date.now();
+    const hops = (r.hops || []).slice().reverse();
+    const t0s = t.t0 + off - 400, t1s = t.t0 + off + (info.burst ? 9000 : 4500);
+    const win = hops.filter(h => { const m = srvMs(h.time); return m >= t0s && m <= t1s; });
+    const starts = win.filter(h => h.source === "PaymentGuard REST" && h.target === "PaymentGuard Decision");
+    if (!starts.length) return;
+    const sids = info.burst ? [...new Set(starts.map(s => s.session))] : [starts[starts.length - 1].session];
+    t.hops = hops.filter(h => sids.includes(h.session)).slice(0, info.burst ? 24 : 40);
+  } catch (e) {}
+}
+function selectTask(t) {
+  tasks.forEach(x => x.el.classList.remove("sel"));
+  t.el.classList.add("sel");
+  replayTask(t);
+  loadReasoning(t);
+}
+function clearTopo() {
+  document.querySelectorAll("#topo .edge.on").forEach(e => e.classList.remove("on", "ai"));
+  document.querySelectorAll("#topo .node").forEach(n => n.classList.remove("v-APPROVE", "v-REVIEW", "v-BLOCK", "v-ai"));
+}
+function replayTask(t) {
+  replayT.forEach(clearTimeout); replayT = [];
+  clearTopo();
+  if (!t.hops || !t.hops.length) { if (t.done) hint("No trace captured for this task (window missed) — click another task or retry."); return; }
+  const times = t.hops.map(h => srvMs(h.time));
+  let acc = 60, prev = times[0];
+  t.hops.forEach((h, i) => {
+    const real = Math.max(0, times[i] - prev); prev = times[i];
+    acc += Math.min(Math.max(real, 170), 850);
+    replayT.push(setTimeout(() => playHop(h, real), acc));
+  });
+  replayT.push(setTimeout(() => {
+    if (t.info && t.info.source === "RULES") hitNode("rules");
+    const out = t.info && OUTCOME_NODE[t.info.verdict];
+    if (out) { const n = document.querySelector('#topo [data-node="' + out + '"]'); n.classList.add("v-" + t.info.verdict); hitNode(out); }
+    hint(summarize(t));
+  }, acc + 250));
+}
+function playHop(h, realMs) {
+  const a = NODE_OF[h.source], b = NODE_OF[h.target];
+  if (!a || !b) return;
+  const key = [a, b].sort().join("-");
+  if (!EDGE_FROM[key]) return;
+  const ai = a === "agent" || b === "agent";
+  runDot(key, a !== EDGE_FROM[key], ai ? HOP_COLOR.agent : (HOP_COLOR[b] || "#4f8ef7"));
+  const eg = document.querySelector('.edge[data-edge="' + key + '"]');
+  eg.classList.add("on"); if (ai) eg.classList.add("ai");
+  setTimeout(() => eg.classList.remove("on", "ai"), 900);
+  hitNode(b);
+  showMs(key, realMs);
+}
+function runDot(key, reverse, color) {
+  const path = document.querySelector('.edge[data-edge="' + key + '"] path');
+  const dot = $("flowdot");
+  cancelAnimationFrame(dotRAF);
+  const len = path.getTotalLength(), st = performance.now(), dur = 430;
+  dot.setAttribute("fill", color);
+  dot.style.opacity = 1;
+  const fr = t => {
+    const p = Math.min(1, (t - st) / dur), e = 1 - Math.pow(1 - p, 3);
+    const pt = path.getPointAtLength((reverse ? 1 - e : e) * len);
+    dot.setAttribute("cx", pt.x); dot.setAttribute("cy", pt.y);
+    if (p < 1) dotRAF = requestAnimationFrame(fr); else dot.style.opacity = 0;
+  };
+  dotRAF = requestAnimationFrame(fr);
+}
+function hitNode(id) {
+  const n = document.querySelector('#topo [data-node="' + id + '"]');
+  if (!n) return;
+  n.classList.remove("hit"); void n.getBoundingClientRect(); n.classList.add("hit");
+}
+function showMs(key, ms) {
+  const path = document.querySelector('.edge[data-edge="' + key + '"] path');
+  const mid = path.getPointAtLength(path.getTotalLength() / 2);
+  const m = $("mslab");
+  m.setAttribute("x", mid.x); m.setAttribute("y", mid.y - 7); m.textContent = ms + " ms";
+  m.style.opacity = 1;
+  clearTimeout(m._h); m._h = setTimeout(() => m.style.opacity = 0, 1800);
+}
+function summarize(t) {
+  if (!t.hops) return "";
+  const times = t.hops.map(h => srvMs(h.time));
+  let s = t.hops.length + " hops · " + ((times[times.length - 1] - times[0]) / 1000).toFixed(2) + "s total";
+  const ai = t.hops.findIndex(h => h.target === "PaymentGuard AI Risk Agent");
+  if (ai >= 0) {
+    const back = t.hops.findIndex((h, k) => k > ai && h.source === "PaymentGuard AI Risk Agent");
+    if (back > 0) s += " · agent reasoning " + ((srvMs(t.hops[back].time) - srvMs(t.hops[ai].time)) / 1000).toFixed(2) + "s (DeepSeek)";
+  }
+  return s;
+}
+function hint(s) { const h = $("fp-hint"); h.textContent = s; }
+async function loadReasoning(t) {
+  const wrap = $("reasonwrap");
+  if (!t.session) { wrap.classList.remove("open"); return; }
+  wrap.classList.add("open");
+  $("rhead").textContent = "AI reasoning · session " + t.session + " · replayable via %AI.Agent.Session";
+  $("rmsgs").innerHTML = ""; $("rverdict").innerHTML = "";
+  try {
+    const r = await (await fetch(API + "/reasoning?session=" + encodeURIComponent(t.session))).json();
+    (r.messages || []).forEach(m => {
+      if (m.role === "system") return;
+      const short = m.content.length > 220 ? m.content.slice(0, 220) + " …" : m.content;
+      const el = document.createElement("div");
+      el.className = "rmsg";
+      el.innerHTML = '<div class="role ' + esc(m.role) + '">' + esc(m.role) + '</div><div class="body">' + esc(short) + '</div>';
+      if (short !== m.content) el.querySelector(".body").addEventListener("click", ev => {
+        ev.target.textContent = ev.target.textContent.endsWith("…") ? m.content : short;
+      });
+      $("rmsgs").appendChild(el);
+    });
+    const i = t.info || {};
+    if (i.verdict) {
+      const line = document.createElement("div");
+      line.className = "verdict-line v-" + i.verdict;
+      $("rverdict").appendChild(line);
+      typeBlur(line, i.verdict + " · risk " + i.risk + " · " + ((i.latency_ms || 0) / 1000).toFixed(1) + "s");
+      (i.reasons || []).forEach((r, k) => {
+        const c = document.createElement("span");
+        c.className = "rchip"; c.textContent = r;
+        c.style.animationDelay = 250 + 120 * k + "ms";
+        $("rverdict").appendChild(c);
+      });
+    }
+  } catch (e) {}
+}
+function typeBlur(el, text) {
+  el.textContent = "";
+  [...text].forEach((ch, i) => {
+    const s = document.createElement("span");
+    s.className = "tchar"; s.textContent = ch;
+    el.appendChild(s);
+    setTimeout(() => s.classList.add("on"), 24 * i + 30);
+  });
+}
+
 hook("btn-one", async () => {
+  const task = addTask("payment · cust_ret_001 · gray zone");
   const r = await post("/payments", {
     customer_id: "cust_ret_001", amount: 480.50, currency: "USD",
     merchant: "GadgetWorld", merchant_category: "ELECTRONICS",
     channel: "ECOM", geo_country: "SG", device_id: "dev_new_" + Math.floor(Math.random() * 999)
   });
   toast("Decision: " + r.action + " (" + r.source + ", risk " + r.risk_score + ")");
+  await finishTask(task, { verdict: r.action, source: r.source, session: r.session_id, risk: r.risk_score, reasons: r.reasons, latency_ms: r.latency_ms });
 });
 
 hook("btn-burst", async () => {
+  const task = addTask("burst · 8 mixed payments");
   const r = await post("/payments/batch", { count: 8 });
-  toast("Burst submitted: " + (r.results || []).length + " payments decided");
+  const n = (r.results || []).length;
+  toast("Burst submitted: " + n + " payments decided");
+  let session = null;
+  try {
+    const d = await (await fetch(API + "/decisions?limit=15")).json();
+    const byTxn = {};
+    (d.decisions || []).forEach(x => { if (x.session_id) byTxn[x.txn_id] = x.session_id; });
+    const agentTxn = ((r.results || []).find(x => x.source === "AGENT") || {}).txn_id;
+    session = agentTxn ? byTxn[agentTxn] || null : null;
+  } catch (e) {}
+  await finishTask(task, { burst: true, count: n, source: "BATCH", session });
 });
 
 hook("btn-claims", async () => {
@@ -281,10 +608,12 @@ hook("btn-claims", async () => {
   ];
   const parts = [];
   for (let i = 0; i < seq.length; i++) {
+    const task = addTask("claim " + (i + 1) + "/3 · " + seq[i][0].split(" →")[0]);
     toast("Claim " + (i + 1) + "/3 deciding… (" + seq[i][0] + ")", 8000);
     const r = await post("/claims", Object.assign({ claim_id: "claim_demo_" + stamp + "_" + (i + 1) }, seq[i][1]));
     parts.push((i + 1) + "→ " + r.action + " · " + r.source);
     refreshAll();
+    await finishTask(task, { verdict: r.action, source: r.source, session: r.session_id, risk: r.risk_score, reasons: r.reasons, latency_ms: r.latency_ms });
   }
   toast("Claim demo: " + parts.join("   "), 6000);
 });

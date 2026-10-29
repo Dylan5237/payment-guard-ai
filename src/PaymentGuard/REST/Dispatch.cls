@@ -24,6 +24,8 @@ XData UrlMap
   <Route Url="/claims" Method="POST" Call="CreateClaim"/>
   <Route Url="/transactions" Method="GET" Call="ListTransactions"/>
   <Route Url="/similar" Method="GET" Call="SimilarTransactions"/>
+  <Route Url="/trace" Method="GET" Call="Trace"/>
+  <Route Url="/reasoning" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases" Method="GET" Call="ListCases"/>
   <Route Url="/stats" Method="GET" Call="Stats"/>
@@ -37,6 +39,8 @@ XData UrlMap
   <Route Url="/claims.csp" Method="POST" Call="CreateClaim"/>
   <Route Url="/transactions.csp" Method="GET" Call="ListTransactions"/>
   <Route Url="/similar.csp" Method="GET" Call="SimilarTransactions"/>
+  <Route Url="/trace.csp" Method="GET" Call="Trace"/>
+  <Route Url="/reasoning.csp" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions.csp" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases.csp" Method="GET" Call="ListCases"/>
   <Route Url="/stats.csp" Method="GET" Call="Stats"/>
@@ -246,6 +250,69 @@ ClassMethod SimilarTransactions() As %Status
     If feat = "" Quit ..WriteError(404, "transaction not found: "_txnId)
     Set results = ##class(PaymentGuard.Vector.Embedder).Search(feat, limit, 0.1, txnId)
     Quit ..WriteJSON({"query_txn_id": (txnId), "results": (results)})
+}
+
+/// The real interoperability message trace: every hop each request made
+/// through the production, straight from Ens.MessageHeader — the same data
+/// the Management Portal message viewer shows. Powers the flow-replay panel.
+ClassMethod Trace() As %Status
+{
+    Set limit = +(%request.Data("limit", 1))
+    If limit < 1 Set limit = 200
+    If limit > 500 Set limit = 500
+    Set arr = []
+    Set tStmt = ##class(%SQL.Statement).%New()
+    Set tSC = tStmt.%Prepare("SELECT TOP ? ID, SessionId, SourceConfigName, TargetConfigName, TimeCreated, MessageBodyClassName FROM Ens.MessageHeader ORDER BY ID DESC")
+    If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
+    Set tRS = tStmt.%Execute(limit)
+    While tRS.%Next() {
+        Set row = {}
+        Do row.%Set("id", tRS.%Get("ID"))
+        Do row.%Set("session", tRS.%Get("SessionId"))
+        Do row.%Set("source", tRS.%Get("SourceConfigName"))
+        Do row.%Set("target", tRS.%Get("TargetConfigName"))
+        Do row.%Set("time", tRS.%Get("TimeCreated"))
+        Do row.%Set("body", tRS.%Get("MessageBodyClassName"))
+        Do arr.%Push(row)
+    }
+    Quit ..WriteJSON({"now": ($ZDATETIME($HOROLOG, 3, 1)), "hops": (arr)})
+}
+
+/// The persisted AI Hub session behind a decision: the real message chain —
+/// the context the agent saw, the tool calls it made, its final answer.
+ClassMethod Reasoning() As %Status
+{
+    Set sid = %request.Data("session", 1)
+    If sid = "" Quit ..WriteError(400, "session is required")
+    Set sess = ##class(%AI.Agent.Session).%OpenId(sid)
+    If '$IsObject(sess) Quit ..WriteError(404, "session not found: "_sid)
+    Set msgs = []
+    Set errText = ""
+    Set st = sess.ContextData
+    If $IsObject(st) {
+        Try {
+            Do st.Rewind()
+            Set txt = ""
+            While 'st.AtEnd { Set txt = txt_st.Read(60000) }
+            Set o = ##class(%DynamicObject).%FromJSON(txt)
+            Set raw = o.%Get("messages")
+            If $IsObject(raw) {
+                For i = 0:1:raw.%Size() - 1 {
+                    Set m = raw.%Get(i)
+                    Set out = {}
+                    Do out.%Set("role", m.%Get("role"))
+                    Set c = m.%Get("content")
+                    If $IsObject(c) Set c = c.%ToJSON()
+                    Do out.%Set("content", c)
+                    Do msgs.%Push(out)
+                }
+            }
+        } Catch ex {
+            Set errText = ex.DisplayString()
+        }
+    }
+    If errText '= "" Quit ..WriteError(500, "session parse failed: "_errText)
+    Quit ..WriteJSON({"session": (sid), "model": (sess.Model), "created_at": (sess.CreatedAt), "messages": (msgs)})
 }
 
 /// Recent decisions with full observability detail
