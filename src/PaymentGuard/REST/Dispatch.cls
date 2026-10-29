@@ -521,6 +521,12 @@ ClassMethod DecideReview() As %Status
 
     Set tSC = t.CompleteTask(action)
     If $$$ISERR(tSC) Quit ..WriteError(500, "complete failed: "_$System.Status.GetErrorText(tSC))
+    // Persist explicitly: this EAP build's Workflow Engine only mutates the
+    // in-memory status object and relies on deferred-response delivery to
+    // save it, which does not happen from a CSP worker process — without
+    // this the task stays open in the worklist after a decision.
+    Set tSC = t.%Save()
+    If $$$ISERR(tSC) Quit ..WriteError(500, "task save failed: "_$System.Status.GetErrorText(tSC))
 
     // Push the final decision back into the production: the Review Finalizer
     // routes settlement/alert, appends the HUMAN audit record and resolves
