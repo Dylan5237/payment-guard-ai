@@ -2,7 +2,7 @@ Include (%occStatus)
 
 /// Raw result from the AI Risk Agent operation: the agent's final answer plus
 /// full cost observability (tokens, tool calls, latency, session id).
-Class PaymentGuard.Response.AgentResult Extends Ens.Response
+Class PaymentGuard.Response.AgentResult Extends (Ens.Response, %JSON.Adaptor)
 {
 
 /// The agent's final message content (expected to be a JSON decision object)

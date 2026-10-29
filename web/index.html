@@ -150,6 +150,16 @@
   .role.user { color: var(--accent); } .role.assistant { color: var(--ai); }
   .role.tool { color: var(--warn); } .role.system { color: #8b8982; }
   .rmsg .body { font-size: 11.5px; color: #c9c8c2; text-wrap: pretty; word-break: break-word; margin-top: 3px; line-height: 1.55; }
+  .mcard { background: var(--f2); border-radius: 10px; padding: 9px 11px; margin-top: 7px; }
+  .mcard .mch { display: flex; align-items: baseline; gap: 10px; font-size: 11px; }
+  .mcard .mch b { color: #d7d6d1; font-weight: 560; }
+  .mcard .mch .mt { margin-left: auto; color: var(--fmuted); font-variant-numeric: tabular-nums; flex: none; }
+  .mcard .mbc { font-size: 10.8px; color: #c9c8c2; line-height: 1.55; margin-top: 6px;
+    max-height: 230px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .mcard .mbc.isnote { color: #8b8982; font-style: italic; font-family: inherit; }
+  .mcard.v-ai { background: rgba(155,108,243,.09); }
+  #topo .node { cursor: pointer; }
   .verdict-line { font-size: 13.5px; font-weight: 600; margin-top: 10px; }
   .verdict-line.v-BLOCK { color: var(--bad); } .verdict-line.v-REVIEW { color: var(--warn); } .verdict-line.v-APPROVE { color: var(--ok); }
   .tchar { opacity: 0; filter: blur(6px); display: inline-block;
@@ -262,6 +272,8 @@
       <text id="mslab" class="mslab" style="opacity:0"></text>
     </svg>
     <div class="fp-hint" id="fp-hint">Trigger any action — its real path through the production replays here, hop by hop with real timings from the message trace.</div>
+    <div class="fp-h" id="msghead" hidden>Messages &middot; <span id="msgnode"></span> <span class="mono" style="letter-spacing:0;text-transform:none" id="msgcount"></span></div>
+    <div class="acc" id="msgacc"><div><div id="msgbody"></div></div></div>
     <div class="fp-h">Task queue</div>
     <div id="flowtasks"></div>
     <div class="acc" id="reasonwrap"><div>
@@ -396,6 +408,7 @@ $("flowfab").addEventListener("click", () => $("flowpanel").classList.toggle("op
 $("flowclose").addEventListener("click", () => $("flowpanel").classList.remove("open"));
 
 let taskSeq = 0, dotRAF = 0, replayT = [];
+let selTask = null, curMsgNode = null, msgSeq = 0;
 const tasks = [];
 
 function fabUpdate() {
@@ -470,10 +483,74 @@ async function captureTrace(t, info) {
 function selectTask(t) {
   tasks.forEach(x => x.el.classList.remove("sel"));
   t.el.classList.add("sel");
+  selTask = t;
+  closeMsgs();
   const base = "/csp/irisapp/EnsPortal.MessageViewer.zen";
   $("mhlink").href = (t.hops && t.hops.length) ? base + "?SESSIONID=" + t.hops[0].session : base;
   replayTask(t);
   loadReasoning(t);
+}
+
+// ── Node click → the actual messages of that hop for the selected task ──
+const NODE_LABEL = { rest: "REST BS", bp: "Decision BP", rules: "Rule Engine", agent: "AI Risk Agent", settle: "Settlement BO", review: "Review Queue BO", alert: "Fraud Alert BO" };
+document.querySelectorAll("#topo .node").forEach(n => n.addEventListener("click", () => { hitNode(n.dataset.node); nodeMsgs(n.dataset.node); }));
+function closeMsgs() {
+  $("msgacc").classList.remove("open");
+  $("msghead").hidden = true;
+  curMsgNode = null;
+}
+async function nodeMsgs(id) {
+  $("flowpanel").classList.add("open");
+  if (curMsgNode === id) { closeMsgs(); return; }
+  curMsgNode = id;
+  const head = $("msghead"), acc = $("msgacc"), body = $("msgbody");
+  head.hidden = false;
+  $("msgnode").textContent = NODE_LABEL[id] || id;
+  $("msgcount").textContent = "";
+  acc.classList.add("open");
+  if (id === "rules") {
+    body.innerHTML = '<div class="mcard"><div class="mbc isnote">The Rule Engine runs in-process inside the Decision BP — no separate message hop. What it evaluated is the PaymentGuard.Request.Payment message on the Decision BP node.</div></div>';
+    return;
+  }
+  if (!selTask || !selTask.hops || !selTask.hops.length) {
+    body.innerHTML = '<div class="mcard"><div class="mbc isnote">Select a finished task in the queue first — then click a node to see the messages that flowed through it.</div></div>';
+    return;
+  }
+  const seq = ++msgSeq;
+  body.innerHTML = '<div class="mcard"><div class="mbc isnote">loading messages…</div></div>';
+  let all = selTask._msgs;
+  if (!all) {
+    const sids = [...new Set(selTask.hops.map(h => h.session))].slice(0, 8);
+    try {
+      const lists = await Promise.all(sids.map(s => (async () => {
+        const r = await (await fetch(API + "/messages?session=" + encodeURIComponent(s))).json();
+        return r.hops || [];
+      })()));
+      all = lists.flat().sort((a, b) => a.id - b.id);
+      selTask._msgs = all;
+    } catch (e) {
+      if (seq === msgSeq) body.innerHTML = '<div class="mcard"><div class="mbc isnote">failed to load messages: ' + esc(e.message) + '</div></div>';
+      return;
+    }
+  }
+  if (seq !== msgSeq) return;
+  const mine = all.filter(h => NODE_OF[h.source] === id || NODE_OF[h.target] === id);
+  $("msgcount").textContent = mine.length + (mine.length === 1 ? " message" : " messages");
+  if (!mine.length) {
+    body.innerHTML = '<div class="mcard"><div class="mbc isnote">No message hops touched this node for the selected task.</div></div>';
+    return;
+  }
+  body.innerHTML = mine.map(msgCard).join("");
+}
+function msgCard(h) {
+  let cls = "", body;
+  try { body = JSON.stringify(JSON.parse(h.body_json), null, 2); }
+  catch (e) { body = h.body_json; if (/^\{"note"/.test(body)) cls = " isnote"; }
+  const short = c => c.replace(/^PaymentGuard /, "");
+  const ai = h.source === "PaymentGuard AI Risk Agent" || h.target === "PaymentGuard AI Risk Agent";
+  return '<div class="mcard' + (ai ? " v-ai" : "") + '"><div class="mch"><b>' + esc(short(h.source)) +
+    ' &rarr; ' + esc(short(h.target)) + '</b><span class="mt">' + esc(String(h.time).slice(11, 23)) + '</span></div>' +
+    '<div class="mbc' + cls + '">' + esc(body) + '</div></div>';
 }
 function clearTopo() {
   document.querySelectorAll("#topo .edge.on").forEach(e => e.classList.remove("on", "ai"));

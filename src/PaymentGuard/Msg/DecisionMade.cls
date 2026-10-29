@@ -2,7 +2,7 @@ Include (%occStatus)
 
 /// Decision notification message routed to the downstream business operations
 /// (settlement, review queue, fraud alert).
-Class PaymentGuard.Msg.DecisionMade Extends Ens.Request
+Class PaymentGuard.Msg.DecisionMade Extends (Ens.Request, %JSON.Adaptor)
 {
 
 Property TxnId As %String(MAXLEN = 64);

@@ -25,6 +25,7 @@ XData UrlMap
   <Route Url="/transactions" Method="GET" Call="ListTransactions"/>
   <Route Url="/similar" Method="GET" Call="SimilarTransactions"/>
   <Route Url="/trace" Method="GET" Call="Trace"/>
+  <Route Url="/messages" Method="GET" Call="Messages"/>
   <Route Url="/reasoning" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases" Method="GET" Call="ListCases"/>
@@ -40,6 +41,7 @@ XData UrlMap
   <Route Url="/transactions.csp" Method="GET" Call="ListTransactions"/>
   <Route Url="/similar.csp" Method="GET" Call="SimilarTransactions"/>
   <Route Url="/trace.csp" Method="GET" Call="Trace"/>
+  <Route Url="/messages.csp" Method="GET" Call="Messages"/>
   <Route Url="/reasoning.csp" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions.csp" Method="GET" Call="ListDecisions"/>
   <Route Url="/cases.csp" Method="GET" Call="ListCases"/>
@@ -276,6 +278,49 @@ ClassMethod Trace() As %Status
         Do arr.%Push(row)
     }
     Quit ..WriteJSON({"now": ($ZDATETIME($HOROLOG, 3, 1)), "hops": (arr)})
+}
+
+/// Every message hop of one production session, with the actual message body
+/// content — the same objects the Message Viewer shows. Session = Ens.MessageHeader
+/// SessionId (the task queue in the dashboard carries it).
+ClassMethod Messages() As %Status
+{
+    Set sid = %request.Data("session", 1)
+    If sid = "" Quit ..WriteError(400, "session is required")
+    Set arr = []
+    Set tStmt = ##class(%SQL.Statement).%New()
+    Set tSC = tStmt.%Prepare("SELECT ID, SourceConfigName, TargetConfigName, TimeCreated, MessageBodyClassName, MessageBodyId FROM Ens.MessageHeader WHERE SessionId = ? ORDER BY ID ASC")
+    If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
+    Set tRS = tStmt.%Execute(sid)
+    While tRS.%Next() {
+        Set row = {}
+        Do row.%Set("id", tRS.%Get("ID"))
+        Do row.%Set("source", tRS.%Get("SourceConfigName"))
+        Do row.%Set("target", tRS.%Get("TargetConfigName"))
+        Do row.%Set("time", tRS.%Get("TimeCreated"))
+        Set cls = tRS.%Get("MessageBodyClassName")
+        Do row.%Set("body_class", cls)
+        Set bodyJSON = ""
+        If cls '= "" {
+            Try {
+                Set body = $CLASSMETHOD(cls, "%OpenId", tRS.%Get("MessageBodyId"))
+                Set bodyJSON = ""
+                If $IsObject(body) {
+                    // %IsA("%JSON.Adaptor") is false in this EAP even for Adaptor
+                    // subclasses — export and let the Catch handle the rest
+                    Set bodySC = body.%JSONExportToString(.bodyJSON)
+                    If $$$ISERR(bodySC) Set bodyJSON = "{""note"":""body not serializable""}"
+                } Else {
+                    Set bodyJSON = "{""note"":""body no longer available (purged)""}"
+                }
+            } Catch ex {
+                Set bodyJSON = "{""note"":""body not serializable""}"
+            }
+        }
+        Do row.%Set("body_json", bodyJSON)
+        Do arr.%Push(row)
+    }
+    Quit ..WriteJSON({"session": (sid), "hops": (arr)})
 }
 
 /// The persisted AI Hub session behind a decision: the real message chain —

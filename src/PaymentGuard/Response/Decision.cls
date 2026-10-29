@@ -1,7 +1,7 @@
 Include (%occStatus)
 
 /// Final decision returned by the production to the REST caller.
-Class PaymentGuard.Response.Decision Extends Ens.Response
+Class PaymentGuard.Response.Decision Extends (Ens.Response, %JSON.Adaptor)
 {
 
 Property TxnId As %String(MAXLEN = 64);
