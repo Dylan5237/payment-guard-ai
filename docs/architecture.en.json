@@ -1,0 +1,384 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PaymentGuard AI System Architecture",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "paymentguard-ai.architecture.en.html",
+    "repository": {
+      "url": "https://github.com/Dylan5237/payment-guard-ai",
+      "provider": "github",
+      "revision": "a6484a64ad6ac500c8e3c5bf1d18c3ed4ece5321"
+    }
+  },
+  "components": [
+    {
+      "id": "dashboard",
+      "type": "frontend",
+      "label": "Risk Dashboard",
+      "sublabel": "web/index.html",
+      "pos": [
+        300,
+        96
+      ],
+      "size": [
+        168,
+        64
+      ],
+      "sources": [
+        {
+          "path": "web/index.html"
+        }
+      ]
+    },
+    {
+      "id": "clients",
+      "type": "external",
+      "label": "Payment Callers",
+      "sublabel": "merchants · claims",
+      "pos": [
+        32,
+        292
+      ],
+      "size": [
+        148,
+        64
+      ]
+    },
+    {
+      "id": "webgateway",
+      "type": "cloud",
+      "label": "Web Gateway",
+      "sublabel": "Apache + CSP · :8082",
+      "pos": [
+        300,
+        292
+      ],
+      "size": [
+        168,
+        66
+      ],
+      "tag": "sidecar container",
+      "sources": [
+        {
+          "path": "webgateway/CSP.ini"
+        }
+      ]
+    },
+    {
+      "id": "restbs",
+      "type": "backend",
+      "label": "REST BS",
+      "sublabel": "/api/payments · /claims",
+      "pos": [
+        568,
+        292
+      ],
+      "size": [
+        176,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/REST/BS.cls"
+        }
+      ]
+    },
+    {
+      "id": "decisionbp",
+      "type": "backend",
+      "label": "Decision BP",
+      "sublabel": "rules first · gray zone to AI",
+      "pos": [
+        844,
+        276
+      ],
+      "size": [
+        184,
+        82
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/DecisionBP.cls"
+        }
+      ]
+    },
+    {
+      "id": "agentop",
+      "type": "backend",
+      "label": "AI Risk Agent",
+      "sublabel": "%AI.Agent · 6 tools",
+      "pos": [
+        844,
+        490
+      ],
+      "size": [
+        184,
+        74
+      ],
+      "tag": "AI Hub",
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/AgentOperation.cls"
+        },
+        {
+          "path": "src/PaymentGuard/Agent/RiskAgent.cls"
+        }
+      ]
+    },
+    {
+      "id": "deepseek",
+      "type": "external",
+      "label": "DeepSeek LLM",
+      "sublabel": "deepseek-chat",
+      "pos": [
+        320,
+        640
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "brand": "deepseek"
+    },
+    {
+      "id": "settlebo",
+      "type": "backend",
+      "label": "Settle BO",
+      "sublabel": "APPROVE · auto-settle",
+      "pos": [
+        1160,
+        108
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/SettleBO.cls"
+        }
+      ]
+    },
+    {
+      "id": "reviewbo",
+      "type": "backend",
+      "label": "Review BO",
+      "sublabel": "REVIEW · human case",
+      "pos": [
+        1160,
+        268
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/ReviewBO.cls"
+        }
+      ]
+    },
+    {
+      "id": "alertbo",
+      "type": "backend",
+      "label": "Alert BO",
+      "sublabel": "BLOCK · fraud alert",
+      "pos": [
+        1160,
+        428
+      ],
+      "size": [
+        168,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Interop/AlertBO.cls"
+        }
+      ]
+    },
+    {
+      "id": "irisdb",
+      "type": "database",
+      "label": "IRIS Database",
+      "sublabel": "Transaction %Vector(256)",
+      "pos": [
+        1104,
+        600
+      ],
+      "size": [
+        220,
+        84
+      ],
+      "sources": [
+        {
+          "path": "src/PaymentGuard/Data/Transaction.cls"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Web Gateway container",
+      "wraps": [
+        "webgateway"
+      ],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "IRIS container · AI EAP 2026.3 (NoPWS)",
+      "wraps": [
+        "restbs",
+        "decisionbp",
+        "agentop",
+        "settlebo",
+        "reviewbo",
+        "alertbo",
+        "irisdb"
+      ],
+      "pad": 20
+    },
+    {
+      "kind": "region",
+      "label": "Interop production PaymentGuard.Production",
+      "wraps": [
+        "restbs",
+        "decisionbp",
+        "agentop",
+        "settlebo",
+        "reviewbo",
+        "alertbo"
+      ],
+      "pad": 14
+    }
+  ],
+  "connections": [
+    {
+      "id": "c-https",
+      "from": "clients",
+      "to": "webgateway",
+      "label": "HTTPS :8082",
+      "variant": "emphasis"
+    },
+    {
+      "id": "c-dash",
+      "from": "dashboard",
+      "to": "webgateway",
+      "label": "GET /api/*",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        384,
+        174
+      ]
+    },
+    {
+      "id": "c-csp",
+      "from": "webgateway",
+      "to": "restbs",
+      "label": "CSP routing"
+    },
+    {
+      "id": "c-pay",
+      "from": "restbs",
+      "to": "decisionbp",
+      "label": "payments / claims"
+    },
+    {
+      "id": "c-gray",
+      "from": "decisionbp",
+      "to": "agentop",
+      "label": "gray-zone sync call",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [
+        908,
+        372
+      ]
+    },
+    {
+      "id": "c-llm",
+      "from": "agentop",
+      "to": "deepseek",
+      "label": "chat.completions"
+    },
+    {
+      "id": "c-approve",
+      "from": "decisionbp",
+      "to": "settlebo",
+      "label": "APPROVE"
+    },
+    {
+      "id": "c-review",
+      "from": "decisionbp",
+      "to": "reviewbo",
+      "label": "REVIEW",
+      "labelAt": [
+        1130,
+        286
+      ]
+    },
+    {
+      "id": "c-block",
+      "from": "decisionbp",
+      "to": "alertbo",
+      "label": "BLOCK"
+    },
+    {
+      "id": "c-store",
+      "from": "decisionbp",
+      "to": "irisdb",
+      "label": "persist + embed",
+      "labelAt": [
+        1055,
+        480
+      ]
+    },
+    {
+      "id": "c-tools",
+      "from": "agentop",
+      "to": "irisdb",
+      "label": "SQL + vector search",
+      "fromSide": "right",
+      "toSide": "top",
+      "labelAt": [
+        1200,
+        568
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Decision pipeline",
+      "items": [
+        "RuleEngine hard rules return APPROVE / BLOCK outright",
+        "PyModel logistic-regression prior score (Embedded Python)",
+        "Gray-zone payments go to the AI agent synchronously; failures fall back to review"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "AI Hub Agent",
+      "items": [
+        "%AI.Agent wrapped in-process; DeepSeek deepseek-chat",
+        "6 tools: customer / transactions / velocity / device / merchant / vector similarity",
+        "Per-decision audit of token cost and latency"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Deployment & data",
+      "items": [
+        "Docker Compose: IRIS AI EAP (NoPWS) + Web Gateway sidecar",
+        "Feature-hash 256-dim vectors; VECTOR_COSINE similarity search",
+        "BOs write final states and CaseRecords — every decision leaves a trail"
+      ]
+    }
+  ]
+}

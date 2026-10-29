@@ -1,0 +1,182 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "PaymentGuard AI 系统架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "output": "paymentguard-ai.architecture.html",
+    "repository": {
+      "url": "https://github.com/Dylan5237/payment-guard-ai",
+      "provider": "github",
+      "revision": "545cac07551ede4dcec8502c365ce9d10d0818b3"
+    }
+  },
+  "components": [
+    {
+      "id": "dashboard",
+      "type": "frontend",
+      "label": "风控仪表盘",
+      "sublabel": "web/index.html",
+      "pos": [300, 96],
+      "size": [168, 64],
+      "sources": [{ "path": "web/index.html" }]
+    },
+    {
+      "id": "clients",
+      "type": "external",
+      "label": "支付请求方",
+      "sublabel": "商户 · 医保理赔",
+      "pos": [32, 292],
+      "size": [148, 64]
+    },
+    {
+      "id": "webgateway",
+      "type": "cloud",
+      "label": "Web Gateway",
+      "sublabel": "Apache + CSP · :8082",
+      "pos": [300, 292],
+      "size": [168, 66],
+      "tag": "sidecar 容器",
+      "sources": [{ "path": "webgateway/CSP.ini" }]
+    },
+    {
+      "id": "restbs",
+      "type": "backend",
+      "label": "REST BS",
+      "sublabel": "/api/payments · /claims",
+      "pos": [568, 292],
+      "size": [176, 66],
+      "sources": [{ "path": "src/PaymentGuard/REST/BS.cls" }]
+    },
+    {
+      "id": "decisionbp",
+      "type": "backend",
+      "label": "Decision BP",
+      "sublabel": "规则先行 · 灰区交 AI",
+      "pos": [816, 276],
+      "size": [184, 82],
+      "sources": [{ "path": "src/PaymentGuard/Interop/DecisionBP.cls" }]
+    },
+    {
+      "id": "agentop",
+      "type": "backend",
+      "label": "AI Risk Agent",
+      "sublabel": "%AI.Agent · 6 工具",
+      "pos": [816, 490],
+      "size": [184, 74],
+      "tag": "AI Hub",
+      "sources": [
+        { "path": "src/PaymentGuard/Interop/AgentOperation.cls" },
+        { "path": "src/PaymentGuard/Agent/RiskAgent.cls" }
+      ]
+    },
+    {
+      "id": "deepseek",
+      "type": "external",
+      "label": "DeepSeek LLM",
+      "sublabel": "deepseek-chat",
+      "pos": [320, 640],
+      "size": [168, 62],
+      "brand": "deepseek"
+    },
+    {
+      "id": "settlebo",
+      "type": "backend",
+      "label": "Settle BO",
+      "sublabel": "APPROVE · 自动结算",
+      "pos": [1160, 108],
+      "size": [168, 62],
+      "sources": [{ "path": "src/PaymentGuard/Interop/SettleBO.cls" }]
+    },
+    {
+      "id": "reviewbo",
+      "type": "backend",
+      "label": "Review BO",
+      "sublabel": "REVIEW · 人工案件",
+      "pos": [1160, 268],
+      "size": [168, 62],
+      "sources": [{ "path": "src/PaymentGuard/Interop/ReviewBO.cls" }]
+    },
+    {
+      "id": "alertbo",
+      "type": "backend",
+      "label": "Alert BO",
+      "sublabel": "BLOCK · 欺诈告警",
+      "pos": [1160, 428],
+      "size": [168, 62],
+      "sources": [{ "path": "src/PaymentGuard/Interop/AlertBO.cls" }]
+    },
+    {
+      "id": "irisdb",
+      "type": "database",
+      "label": "IRIS 数据库",
+      "sublabel": "Transaction %Vector(256)",
+      "pos": [1104, 600],
+      "size": [220, 84],
+      "sources": [{ "path": "src/PaymentGuard/Data/Transaction.cls" }]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Web Gateway 容器",
+      "wraps": ["webgateway"],
+      "pad": 14
+    },
+    {
+      "kind": "region",
+      "label": "IRIS 容器 · AI EAP 2026.3（NoPWS）",
+      "wraps": ["restbs", "decisionbp", "agentop", "settlebo", "reviewbo", "alertbo", "irisdb"],
+      "pad": 20
+    },
+    {
+      "kind": "region",
+      "label": "互操作生产 PaymentGuard.Production",
+      "wraps": ["restbs", "decisionbp", "agentop", "settlebo", "reviewbo", "alertbo"],
+      "pad": 14
+    }
+  ],
+  "connections": [
+    { "id": "c-https", "from": "clients", "to": "webgateway", "label": "HTTPS :8082", "variant": "emphasis" },
+    { "id": "c-dash", "from": "dashboard", "to": "webgateway", "label": "GET /api/*", "fromSide": "bottom", "toSide": "top", "labelAt": [384, 174] },
+    { "id": "c-csp", "from": "webgateway", "to": "restbs", "label": "CSP 路由" },
+    { "id": "c-pay", "from": "restbs", "to": "decisionbp", "label": "交易 / 理赔" },
+    { "id": "c-gray", "from": "decisionbp", "to": "agentop", "label": "灰区同步调用", "variant": "emphasis", "fromSide": "bottom", "toSide": "top", "labelAt": [908, 372] },
+    { "id": "c-llm", "from": "agentop", "to": "deepseek", "label": "chat.completions" },
+    { "id": "c-approve", "from": "decisionbp", "to": "settlebo", "label": "APPROVE" },
+    { "id": "c-review", "from": "decisionbp", "to": "reviewbo", "label": "REVIEW", "labelAt": [1130, 286] },
+    { "id": "c-block", "from": "decisionbp", "to": "alertbo", "label": "BLOCK" },
+    { "id": "c-store", "from": "decisionbp", "to": "irisdb", "label": "落库 + 向量嵌入", "labelAt": [1055, 480] },
+    { "id": "c-tools", "from": "agentop", "to": "irisdb", "label": "SQL + 向量检索", "fromSide": "right", "toSide": "top", "labelAt": [1200, 568] }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "决策链路",
+      "items": [
+        "RuleEngine 硬规则直接 APPROVE / BLOCK",
+        "PyModel 逻辑回归先验分（Embedded Python）",
+        "灰区交易同步交 AI Agent，失败兜底转人工"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "AI Hub Agent",
+      "items": [
+        "%AI.Agent 进程内包装，DeepSeek deepseek-chat",
+        "6 工具：客户 / 交易 / 速率 / 设备 / 商户 / 向量相似",
+        "逐笔审计 token 成本与延迟"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "部署与数据",
+      "items": [
+        "Docker Compose：IRIS AI EAP（NoPWS）+ Web Gateway sidecar",
+        "特征哈希 256 维向量，VECTOR_COSINE 相似检索",
+        "BO 回写终态与 CaseRecord，全链路留痕"
+      ]
+    }
+  ]
+}
