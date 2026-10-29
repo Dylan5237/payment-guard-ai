@@ -24,7 +24,8 @@ A 4-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone
 - **Online demo** — [http://43.139.159.100:8082/paymentguard/](http://43.139.159.100:8082/paymentguard/): the live dashboard, the REST API at `/paymentguard/api` and the production behind it, deciding in live DeepSeek mode. Management Portal: http://43.139.159.100:8082/csp/sys/UtilHome.csp (`SuperUser` / `SYS`).
 - **IPM package** — module `paymentguard`: `zpm "install paymentguard"` installs classes, REST web apps and the dashboard.
 - **Embedded Python inside** — two Python-native components in the decision path: the offline-trained logistic risk prior (`ml_model` in the risk context) and the transaction feature hasher behind vector similarity (see below). Both are `[Language = python]` methods, pure standard library, no pip packages.
-- **No API key? Mock mode** — the stack runs end-to-end offline: a deterministic engine answers in the same JSON contract, and the whole %UnitTest suite (30 tests) is green without any key.
+- **No API key? Mock mode** — the stack runs end-to-end offline: a deterministic engine answers in the same JSON contract, and the whole %UnitTest suite (33 tests) is green without any key.
+- **Operations guide** — [OPERATIONS.md](OPERATIONS.md): configuration (including swapping the model at runtime), health checks, failure playbook and security notes for reusing the stack beyond the demo.
 - **Sources & media** — this repository, the [demo video](https://youtu.be/ZcotKFBElKM), the [Developer Community article](https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production) and Open Exchange (*PaymentGuard-AI*).
 
 ---
@@ -142,6 +143,12 @@ dependencies. Add a key and recreate the container to go live.
 | `AI_API_KEY` | — | Generic fallback key |
 | `AI_BASE_URL` | — | Optional custom endpoint for OpenAI-compatible servers |
 | `AGENT_MOCK` | `0` | `1` forces the deterministic mock engine even when a key exists |
+| `ADMIN_TOKEN` | — | Shared secret required by `/admin/*` endpoints (`X-Admin-Token` header) |
+
+Every model setting can also be changed **at runtime** (no restart, takes effect
+on the next decision) via `PUT /admin/model` — see
+[Operations](OPERATIONS.md#configuration); the API answers which value is in
+effect and where each one comes from (`runtime` override, `env` or `default`).
 
 ---
 
@@ -164,10 +171,14 @@ Base: `http://localhost:8082/paymentguard/api`
 | `GET /trace?limit=300` | Recent `Ens.MessageHeader` hops (id, session, source, target, body class, ms timestamps) — powers the Flow replay panel |
 | `GET /messages?session=N` | Every message body of one production session — the object behind each header, serialized to JSON |
 | `GET /reasoning?session=N` | The persisted `%AI.Agent.Session` message chain (context, tool calls, final answer) |
-| `GET /decisions?limit=20` | Decision audit trail with reasons, model, tokens, latency |
-| `GET /cases?limit=20` | Human-review cases and fraud alerts |
+| `GET /decisions?limit=20` | Decision audit trail with reasons, model, tokens, latency, reviewer (for `HUMAN` rows) |
+| `GET /cases?limit=20` | Human-review cases and fraud alerts (with resolution + resolver once finalized) |
+| `GET /reviews?limit=20` | Open human-review tasks from the native Workflow Engine |
+| `POST /reviews/decide` | `{"task_id":N,"action":"Approve"\|"Reject","reviewer":"RiskAnalyst"}` — complete the task; the Review Finalizer settles or blocks the payment |
 | `GET /stats` | Aggregates for the dashboard |
-| `POST /admin/reseed` | Wipe and reseed demo data |
+| `GET /admin/model` | Effective model configuration and where each value comes from |
+| `PUT /admin/model` | Change provider/model/base_url/api_key or flip mock mode at runtime (`X-Admin-Token` required) |
+| `POST /admin/reseed` | Wipe and reseed demo data (`X-Admin-Token` required) |
 
 Payment body:
 
@@ -389,9 +400,11 @@ The suite covers the rule engine branches, defensive JSON parsing/validation, an
 end-to-end production run in mock mode (blocked, fast-approved, gray-zone, fraud-pattern
 and audit-trail cases), the healthcare claims scenario (endpoint mapping, the
 duplicate cross-city rule, the provider blacklist and the agent-correlated claim
-flow), and the vector search layer (embedding determinism, seeded-claim retrieval,
-context injection, self-exclusion, end-to-end embedding) — it runs offline, no
-API key needed.
+flow), the vector search layer (embedding determinism, seeded-claim retrieval,
+context injection, self-exclusion, end-to-end embedding), and the human-review
+workflow (task creation for REVIEW decisions, claim + complete, approve→settlement
+and reject→block finalization with audit and case resolution) — it runs offline,
+no API key needed.
 
 ## Project structure
 
