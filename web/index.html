@@ -54,6 +54,13 @@
   .summary { color: var(--muted); font-size: 12px; max-width: 340px; }
   .reasons { margin-top: 3px; }
   .reasons span { display: inline-block; background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; margin: 2px 4px 0 0; font-size: 10.5px; color: var(--muted); }
+  #feed tr { cursor: pointer; }
+  #feed tr:hover td { background: rgba(79,142,247,.05); }
+  #feed tr.sel td { background: rgba(79,142,247,.09); }
+  .simnum { font-weight: 700; color: var(--ai); font-size: 13px; }
+  .simbar { width: 110px; height: 6px; background: var(--panel2); border: 1px solid var(--line); border-radius: 4px; margin-top: 4px; }
+  .simbar i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--ai)); border-radius: 4px; }
+  .badge.PLAIN { background: rgba(125,139,163,.15); color: var(--muted); }
   footer { margin-top: 16px; color: var(--muted); font-size: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
   footer a { color: var(--accent); text-decoration: none; }
   .empty { padding: 22px 16px; color: var(--muted); text-align: center; }
@@ -67,6 +74,7 @@
   <span class="pill model" id="model-pill">…</span>
   <div class="spacer"></div>
   <button id="btn-one">Send payment</button>
+  <button id="btn-claims" class="secondary">Healthcare claim demo ×3</button>
   <button id="btn-burst" class="secondary">Simulate burst (8)</button>
   <button id="btn-seed" class="secondary">Reseed data</button>
 </header>
@@ -102,6 +110,20 @@
     </div>
     <div class="empty" id="cases-empty">Queue is clear.</div>
   </div>
+</div>
+
+<div class="panel" id="vecpanel" style="margin-top:14px">
+  <h2>Vector-similar transactions
+    <span style="text-transform:none;letter-spacing:0;font-weight:400">&nbsp;— IRIS Vector Search · cosine over 256-dim Embedded-Python embeddings · click any decision above</span>
+    <button class="secondary" id="btn-vec-seed" style="float:right;margin-top:-5px;padding:3px 10px;font-size:11px">seeded cataract claim</button>
+  </h2>
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Similarity</th><th>Neighbor transaction</th><th>Amount</th><th>Merchant / provider</th><th>Procedure</th><th>City</th><th>Status</th></tr></thead>
+      <tbody id="vecbody"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="vec-empty">Click a decision in the feed — its semantic neighbors appear here (VECTOR_COSINE top-K, similarity 1.0 = near-identical).</div>
 </div>
 
 <footer>
@@ -153,7 +175,7 @@ async function refreshFeed() {
   try {
     const d = await (await fetch(API + "/decisions?limit=25")).json();
     const rows = (d.decisions || []).map(x => `
-      <tr>
+      <tr data-txn="${esc(x.txn_id)}" title="Click to show vector-similar transactions">
         <td class="mono">${esc((x.created_at || "").slice(5, 19))}</td>
         <td><b>${esc(x.customer_id)}</b><br><span class="mono">$${(+x.amount).toLocaleString()} &middot; ${esc(x.geo_country || "??")} &middot; ${esc(x.merchant || "unknown merchant")}</span></td>
         <td><span class="badge ${x.action}">${x.action}</span><br><span class="chip ${x.source}">${x.source === "AGENT" ? "AI AGENT" : x.source}</span></td>
@@ -210,6 +232,56 @@ hook("btn-burst", async () => {
   const r = await post("/payments/batch", { count: 8 });
   toast("Burst submitted: " + (r.results || []).length + " payments decided");
 });
+
+hook("btn-claims", async () => {
+  const stamp = Date.now();
+  const seq = [
+    ["Beijing, cross-city duplicate → rules", { member_id: "memb_001", provider: "Beijing Union Medical College Hospital", procedure: "CATARACT_SURGERY", diagnosis: "H25.9", amount: 12800, city: "Beijing", currency: "CNY" }],
+    ["Shanghai, same city → AI agent", { member_id: "memb_001", provider: "Shanghai Renji Hospital", procedure: "CATARACT_SURGERY", diagnosis: "H25.9", amount: 12800, city: "Shanghai", currency: "CNY" }],
+    ["Blacklisted provider → rules", { member_id: "memb_002", provider: "Sunrise Wellness Center", procedure: "PHYSICAL_EXAM", diagnosis: "Z00.0", amount: 980, city: "Shenzhen", currency: "CNY" }],
+  ];
+  const parts = [];
+  for (let i = 0; i < seq.length; i++) {
+    toast("Claim " + (i + 1) + "/3 deciding… (" + seq[i][0] + ")");
+    const r = await post("/claims", Object.assign({ claim_id: "claim_demo_" + stamp + "_" + (i + 1) }, seq[i][1]));
+    parts.push((i + 1) + "→ " + r.action + " · " + r.source);
+    refreshAll();
+  }
+  toast("Claim demo: " + parts.join("   "));
+});
+
+let selTr = null;
+$("feed").addEventListener("click", e => {
+  const tr = e.target.closest("tr");
+  if (!tr || !tr.dataset.txn) return;
+  if (selTr) selTr.classList.remove("sel");
+  selTr = tr; tr.classList.add("sel");
+  showSimilar(tr.dataset.txn);
+});
+$("btn-vec-seed").addEventListener("click", () => showSimilar("claimhist_memb_001_CATARACT_SURGERY_3"));
+
+async function showSimilar(txnId) {
+  try {
+    const r = await (await fetch(API + "/similar?txn_id=" + encodeURIComponent(txnId) + "&limit=5")).json();
+    const rows = (r.results || []).map(x => {
+      const sim = Math.round((x.similarity ?? 0) * 1000) / 10;
+      const st = x.status === "SETTLED" ? "APPROVE" : x.status === "BLOCKED" ? "BLOCK" : x.status === "REVIEW" ? "REVIEW" : "PLAIN";
+      return `<tr>
+        <td><span class="simnum">${sim.toFixed(3)}</span><div class="simbar"><i style="width:${Math.min(100, sim)}%"></i></div></td>
+        <td><span class="mono">${esc(x.txn_id)}</span><br><b>${esc(x.customer_id)}</b></td>
+        <td class="mono">${(+x.amount).toLocaleString()} ${esc(x.currency || "")}</td>
+        <td>${esc(x.merchant || "")}</td>
+        <td>${x.procedure ? "<b>" + esc(x.procedure) + "</b><br><span class='mono'>" + esc(x.diagnosis || "") + "</span>" : "<span class='mono'>payment</span>"}</td>
+        <td>${esc(x.city || "")}</td>
+        <td><span class="badge ${st}">${x.status}</span></td>
+      </tr>`;
+    }).join("");
+    $("vecbody").innerHTML = rows;
+    const empty = $("vec-empty");
+    empty.style.display = rows ? "none" : "block";
+    empty.textContent = "No neighbors above threshold for " + txnId;
+  } catch (e) { toast("Similarity query failed: " + e.message); }
+}
 
 hook("btn-seed", async () => { await post("/admin/reseed"); toast("Demo data reseeded"); });
 
