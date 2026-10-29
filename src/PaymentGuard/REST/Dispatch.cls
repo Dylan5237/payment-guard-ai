@@ -425,10 +425,16 @@ ClassMethod Stats() As %Status
     Quit ..WriteJSON(o)
 }
 
-/// Reseed demo data
+/// Reseed demo data. Stops the production first: wiping tables while
+/// requests are in flight poisons the shutdown state and wedges every
+/// subsequent start (ErrProductionNotShutdownCleanly).
 ClassMethod Reseed() As %Status
 {
+    Do ##class(Ens.Director).StopProduction()
+    Hang 2
     Set sc = ##class(PaymentGuard.Data.Populate).Seed(1)
+    Do ##class(PaymentGuard.Util.Setup).EnsureRunning()
+    Hang 2
     If $$$ISERR(sc) Quit ..WriteError(500, $System.Status.GetErrorText(sc))
     Quit ..WriteJSON({"reseeded": (1)})
 }
