@@ -14,9 +14,9 @@ Built for the **InterSystems Programming Contest: AI Agent in Interoperability W
 
 ## Demo
 
-[![PaymentGuard AI — demo video](docs/logo.png)](https://www.youtube.com/watch?v=ZcotKFBElKM)
+[![Watch the demo — PaymentGuard AI](https://img.youtube.com/vi/gk_4e_GpJN0/maxresdefault.jpg)](https://youtu.be/gk_4e_GpJN0)
 
-A 4-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, the healthcare claims scenario (cross-city duplicate reimbursement, agent-correlated claims, blacklisted provider), a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.
+A 4:47 walkthrough: instant rule decisions with zero LLM cost, the gray zone going to the AI Hub agent and its SQL tools, the native Workflow Engine human-review loop, the healthcare claims scenario (cross-city duplicate reimbursement, agent-correlated claims, blacklisted provider), a burst demo where the agent correlates an account-takeover pattern, and the audit trail with tokens, latency and a replayable session id.
 
 ## Deployment and distribution
 
@@ -26,7 +26,7 @@ A 4-minute walkthrough: instant rule decisions with zero LLM cost, the gray zone
 - **Embedded Python inside** — two Python-native components in the decision path: the offline-trained logistic risk prior (`ml_model` in the risk context) and the transaction feature hasher behind vector similarity (see below). Both are `[Language = python]` methods, pure standard library, no pip packages.
 - **No API key? Mock mode** — the stack runs end-to-end offline: a deterministic engine answers in the same JSON contract, and the whole %UnitTest suite (33 tests) is green without any key.
 - **Operations guide** — [OPERATIONS.md](OPERATIONS.md): configuration (including swapping the model at runtime), health checks, failure playbook and security notes for reusing the stack beyond the demo.
-- **Sources & media** — this repository, the [demo video](https://youtu.be/ZcotKFBElKM), the [Developer Community article](https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production) and Open Exchange (*PaymentGuard-AI*).
+- **Sources & media** — this repository, the [demo video](https://youtu.be/gk_4e_GpJN0), the [Developer Community article](https://community.intersystems.com/post/paymentguard-ai-ai-hub-agent-fraud-decision-maker-inside-iris-interoperability-production) and Open Exchange (*PaymentGuard-AI*).
 
 ---
 
