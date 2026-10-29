@@ -89,9 +89,9 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
         Set aReq.ContextJSON = ctx.%ToJSON()
 
         Set aResp = ""
-        // 45s timeout: a hung LLM call must fall back to human review, never
+        // 20s timeout: a hung LLM call must fall back to human review, never
         // wedge the whole pipeline behind the queue
-        Set agentSC = ..SendRequestSync(..#AGENTTARGET, aReq, .aResp, 45)
+        Set agentSC = ..SendRequestSync(..#AGENTTARGET, aReq, .aResp, 20)
 
         If $$$ISERR(agentSC) || '$IsObject(aResp) {
             Set action = "REVIEW"

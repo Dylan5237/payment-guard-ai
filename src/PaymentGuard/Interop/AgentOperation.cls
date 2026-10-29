@@ -67,7 +67,7 @@ Method Decide(pRequest As PaymentGuard.Request.AgentDecision, Output pResponse A
     Set tSC = agent.%Init()
     If $$$ISERR(tSC) Quit tSC
 
-    Set session = agent.CreateSession({"max_iterations": 8})
+    Set session = agent.CreateSession({"max_iterations": 3})
     Set chatMsg = "Authorize or decline this payment. Context (JSON): "_pRequest.ContextJSON
 
     Try {
