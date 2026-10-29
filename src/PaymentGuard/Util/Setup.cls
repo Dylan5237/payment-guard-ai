@@ -56,9 +56,9 @@ ClassMethod CancelOpenWorkflowTasks() As %Status
     Set tSC = $$$OK
     Set tStmt = ##class(%SQL.Statement).%New()
     Set dStmt = ##class(%SQL.Statement).%New()
-    Set tSC = dStmt.%Prepare("DELETE FROM EnsLib.Workflow.Worklist WHERE Task = ?")
+    Set tSC = dStmt.%Prepare("DELETE FROM EnsLib_Workflow.Worklist WHERE Task = ?")
     If $$$ISERR(tSC) Quit tSC
-    Set tSC = tStmt.%Prepare("SELECT ID FROM EnsLib.Workflow.TaskResponse ORDER BY ID DESC")
+    Set tSC = tStmt.%Prepare("SELECT ID FROM EnsLib_Workflow.TaskResponse ORDER BY ID DESC")
     If $$$ISERR(tSC) Quit tSC
     Set tRS = tStmt.%Execute()
     While tRS.%Next() {
