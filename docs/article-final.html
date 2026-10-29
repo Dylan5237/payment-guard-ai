@@ -1,0 +1,112 @@
+<h2>PaymentGuard AI: an AI Hub agent as the decision-maker in an IRIS interoperability production</h2>
+
+
+
+<p>Payment authorization is a decision problem. Most payment flows are boring — a known customer, a typical amount, a familiar device — and a handful of deterministic rules settle them in microseconds. But between "obviously fine" and "obviously fraud" lives the gray zone: a new device, an unusual country, an amount a little above baseline, a customer with pending KYC. That gray zone is where human analysts spend their day, and it is exactly where an LLM agent with <strong>grounded tool access</strong> can help.</p>
+
+<p>PaymentGuard AI puts a real IRIS AI Hub agent (<code>%AI.Agent</code>) inside an ordinary interoperability production as a business operation. The agent doesn't guess — it queries the payment platform's own IRIS database through AI Hub SQL tools, then answers with a strict JSON decision that the production routes, audits and accounts for.</p>
+
+<h2>Architecture</h2>
+
+POST /paymentguard/api/payments
+        │
+        ▼
+┌─ PaymentGuard.Production ─────────────────────────────────┐
+│  REST BS → Decision BP                                     │
+│              1. persist attempt                            │
+│              2. enrich (customer / velocity / device /     │
+│                 merchant — live SQL)                       │
+│              3. deterministic rules                        │
+│                  ├─ blacklist / sanctions / caps / burst   │
+│                  │    → BLOCK  (no LLM call, 0 tokens)     │
+│                  ├─ trusted + small + home + known device  │
+│                  │    → APPROVE fast path (0 tokens)       │
+│                  └─ everything else = gray zone ──┐        │
+│              4. parse + validate JSON            │        │
+│              5. route outcome                    ▼        │
+│              6. immutable audit record   AI Risk Agent BO  │
+│                                            (%AI.Agent +    │
+│  APPROVE → Settlement BO                  5 SQL tools)     │
+│  REVIEW  → Review queue BO (case)                           │
+│  BLOCK   → Fraud alert BO                                  │
+└─────────────────────────────────────────────────────────────┘
+
+<p>The centerpiece is the <strong>"PaymentGuard AI Risk Agent" business operation</strong>: a plain <code>Ens.BusinessOperation</code> that hosts the AI Hub agent in-process. A business process talks to the AI exactly like it talks to any other operation — queued, retried, and traced message-by-message in the Management Portal — while the operation internally instantiates the declarative agent, runs the agentic loop, persists the <code>%AI.Agent.Session</code> and reports token usage back into the message flow.</p>
+
+<h2>The agent</h2>
+
+<p><code>PaymentGuard.Agent.RiskAgent</code> extends <code>%AI.Agent</code>:</p>
+
+<li><strong>INSTRUCTIONS</strong> — a payment-underwriter persona with an explicit decision policy (BLOCK only on converging signals, REVIEW when unusual-but-plausible, APPROVE when consistent with established profile) and a strict output contract: one JSON object, nothing else — <code>action</code>, <code>risk_score</code>, <code>confidence</code>, snake_case <code>reasons[]</code>, a human-readable <code>summary</code>.</li>
+<li><strong>Tools</strong> — five read-only tools (<code>%AI.Tool</code> methods): customer profile, recent transactions, payment velocity, device reputation, merchant statistics. Each is live SQL over the production's own tables; the agent decides what to verify.</li>
+<li><strong>Provider-agnostic</strong> — DeepSeek out of the box (<code>AI_PROVIDER</code>/<code>AI_MODEL</code>/<code><PROVIDER>_API_KEY</code> in <code>.env</code>); any AI Hub provider works.</li>
+
+<p>The decision process treats the agent like any fallible dependency: its answer is parsed defensively (plain JSON, fenced JSON, JSON-in-prose), validated against the contract, and <strong>any failure degrades to a human REVIEW with a reason code</strong> — an AI outage never silently approves and never blocks revenue.</p>
+
+<h2>Real decisions, real reasons</h2>
+
+<p>A 12-payment demo burst produced exactly the split you'd want — 7 APPROVE (2 by rules, 5 by the agent), 4 REVIEW, 1 BLOCK. The agent's reasoning is grounded in the data it queried. Two examples from the live run:</p>
+
+<blockquote><p><strong>BLOCK, risk 88</strong> — "Three high-value ecommerce payments from Hong Kong and UAE fired within 9 seconds on a device first seen today, far above Alice Tanaka's ~$900/month baseline of US-based small purchases — classic account-takeover card-testing burst."</p></blockquote>
+<blockquote><p>reasons: <code>burst_velocity_3_txns_9s</code>, <code>geo_mismatch_hk_ae_vs_us_home</code>, <code>amount_above_baseline_710_vs_avg_monthly_900</code>, <code>brand_new_device_first_seen_today</code></p></blockquote>
+
+<blockquote><p><strong>REVIEW, risk 45</strong> — "Customer's established history is DE e-commerce spend with AWS/Siemens, but this is a first-seen device making a card payment at a Turkish luxury watch merchant. Amount is small and there is no velocity burst … risk is moderate rather than clear-cut — route to human review."</p></blockquote>
+
+<p>The first decision is the interesting one: the agent <strong>correlated three separate payments inside the same burst</strong> (via its velocity tool) and named the fraud pattern. Every decision row carries prompt/completion tokens, tool-call count, latency, model and the persisted AI Hub session id — any decision can be replayed with <code>##class(%AI.Agent.Session).%OpenId(<id>)</code>. In the demo run the agent spent ~3,000 prompt + ~350 completion tokens and ~2–3 s per gray-zone decision; the fast-path and rule decisions cost zero.</p>
+
+<h2>Healthcare claims: the same engine, one more fraud domain</h2>
+
+<p>Health-insurance claim settlement is just a payment with extra vocabulary: the <em>member</em> is the customer, the <em>provider</em> is the merchant, and the claim carries <code>procedure</code>, <code>diagnosis</code> and <code>city</code>. Those fields ride the entire pipeline unchanged — rules, enrichment, agent context, audit trail — so the production learns a second fraud domain through a purely additive change. Two deterministic claim rules extend the rule engine: the same member settling the <strong>same procedure in another city</strong> within 7 days of a settled claim blocks instantly (<code>DUPLICATE_CROSS_CITY_CLAIM</code>), and providers reuse the merchant blacklist (<code>BLACKLISTED_MERCHANT</code>). The agent's instructions map the claim vocabulary and the duplicate-reimbursement pattern, so gray-zone claims get correlated against the member's settlement history.</p>
+
+<p>The demo scenario: member <code>memb_001</code> settled a full-price cataract surgery (CNY 12,800) at Shanghai Renji Hospital 3 days ago. Three claims via <code>POST /api/claims</code>, three mechanisms.</p>
+
+<p>The same surgery filed in Beijing — the rule engine answers in milliseconds, zero tokens:</p>
+
+<pre>curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Beijing Union Medical College Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Beijing","currency":"CNY"}'</pre>
+
+<blockquote><p><strong>BLOCK · RULES</strong> — <code>DUPLICATE_CROSS_CITY_CLAIM</code> — "Insured member settled procedure CATARACT_SURGERY in Shanghai within the last 7 days (prior claim claimhist_memb_001_CATARACT_SURGERY_3 on 2026-10-25) - duplicate cross-city reimbursement"</p></blockquote>
+
+<p>The same surgery back in Shanghai — same city, so the rule doesn't fire. The gray zone goes to the agent, which correlates the settled surgery with today's blocked Beijing attempt:</p>
+
+<pre>curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Shanghai Renji Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Shanghai","currency":"CNY"}'</pre>
+
+<blockquote><p><strong>BLOCK · AGENT (deepseek-chat)</strong>, risk 92, confidence 0.9 — reasons <code>duplicate_reimbursement</code>, <code>same_procedure_multiple_cities</code>, <code>same_procedure_settled_3_days_ago</code>, <code>prior_attempt_blocked_today</code>, <code>amount_matches_duplicate_exactly</code> — "Member Zhang Wei already has CATARACT_SURGERY (H25.9) settled at Shanghai Renji Hospital on 2026-10-25 for CNY 12,800; a further identical claim was attempted at Beijing Union Medical College Hospital today and blocked, and now the same procedure/amount is presented again in Shanghai. This is a duplicate reimbursement attempt across providers/cities and should be declined and escalated." — 1,985 prompt + 154 completion tokens, 1.8 s.</p></blockquote>
+
+<p>And a claim from a blacklisted provider never reaches the LLM: <code>BLACKLISTED_MERCHANT</code>, instant block, zero tokens. The seed data ships four members, four hospitals and dialysis / surgery / imaging history, and the %UnitTest suite grew to 24 — claim endpoint mapping, the cross-city duplicate rule, the provider blacklist, and the agent-correlated claim flow.</p>
+
+<h2>The NoPWS surprise (or: how to serve anything from these builds)</h2>
+
+<p>The 2026.3 AI Hub EAP builds are <strong>NoPWS</strong> — the private web server on port 52773 is disabled entirely; no portal, no REST, nothing HTTP from the IRIS container. PaymentGuard therefore ships a standard InterSystems <strong>Web Gateway sidecar</strong> (<code>containers.intersystems.com/intersystems/webgateway</code>) and documents the three things that made it work:</p>
+
+<p>1. <strong>Credentials live in CSP.ini</strong> — this gateway build ignores the usual <code>ISC_CSP_IRIS_*</code> env vars; the <code>[LOCAL]</code> section needs <code>Username=CSPSystem</code> / <code>Password=SYS</code>, and the EAP builds no longer create the CSPSystem user, so the installer creates it and enables <code>%Service_WebGateway</code>.</p>
+<p>2. <strong>The Apache module dispatches by file extension</strong> (<code>CSPFileTypes csp cls zen cxw</code>) — extensionless REST URLs never reach IRIS. The stack internally rewrites them to a <code>.csp</code> twin route (mod_rewrite + a doubled UrlMap), so pretty URLs like <code>POST /payments</code> work unchanged.</p>
+<p>3. <strong>Unauthenticated demo access</strong> needs the web apps' roles granted to UnknownUser, or every request dies with <code><PROTECT></code>/403 before reaching your dispatch class.</p>
+
+<p>The dashboard itself is plain static HTML served straight from Apache (mounted <code>web/</code> directory), polling the API — no build step, no npm.</p>
+
+<h2>Try it</h2>
+
+docker load -i iris-community-2026.3.0AI.154.0-docker.tar.gz   # from the EAP portal
+docker pull containers.intersystems.com/intersystems/webgateway:latest-cd
+git clone https://github.com/Dylan5237/payment-guard-ai &amp;&amp; cd payment-guard-ai
+cp .env.example .env      # add DEEPSEEK_API_KEY (or any provider)
+docker compose up -d --build
+
+<p>Open http://localhost:8082/paymentguard/ for the live decision console, or POST a payment:</p>
+
+curl -s -X POST localhost:8082/paymentguard/api/payments -H &quot;Content-Type: application/json&quot; \
+  -d &#x27;{&quot;customer_id&quot;:&quot;cust_ret_003&quot;,&quot;amount&quot;:430,&quot;geo_country&quot;:&quot;SG&quot;,&quot;device_id&quot;:&quot;dev_new_9&quot;,&quot;merchant&quot;:&quot;GadgetWorld&quot;}&#x27;
+
+<p>No API key? The stack runs end-to-end in <strong>mock mode</strong> — a deterministic engine answers in the same JSON contract, so the flow, dashboard, audit trail and the whole %UnitTest suite work offline (<code>do ##class(PaymentGuard.Tests.Suite).RunAll()</code> — 24 tests, green).</p>
+
+<h2>What we'd build next</h2>
+
+<li>a second-stage <strong>dispute analyst agent</strong> that works the REVIEW queue with write-scoped tools (place holds, request documents);</li>
+<li><strong>OpenTelemetry span export</strong> for agent calls (the <code>%AI</code> stack is OTel-ready — we ship the audit table today, spans next);</li>
+<li>RAG over analyst notes so the agent learns from past resolutions.</li>
+
+<p>---</p>
+
+<p><em>PaymentGuard AI is an open-source demo built on the InterSystems IRIS 2026.3 AI Hub Early Access build. Thanks to the AI Hub team for the EAP program and the <code>%AI</code> SDK — the agent/production boundary felt genuinely well-designed once we stopped fighting the container's missing web server.</em></p>

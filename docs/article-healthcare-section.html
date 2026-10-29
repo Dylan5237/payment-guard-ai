@@ -1,0 +1,22 @@
+<h2>Healthcare claims: the same engine, one more fraud domain</h2>
+
+<p>Health-insurance claim settlement is just a payment with extra vocabulary: the <em>member</em> is the customer, the <em>provider</em> is the merchant, and the claim carries <code>procedure</code>, <code>diagnosis</code> and <code>city</code>. Those fields ride the entire pipeline unchanged — rules, enrichment, agent context, audit trail — so the production learns a second fraud domain through a purely additive change. Two deterministic claim rules extend the rule engine: the same member settling the <strong>same procedure in another city</strong> within 7 days of a settled claim blocks instantly (<code>DUPLICATE_CROSS_CITY_CLAIM</code>), and providers reuse the merchant blacklist (<code>BLACKLISTED_MERCHANT</code>). The agent's instructions map the claim vocabulary and the duplicate-reimbursement pattern, so gray-zone claims get correlated against the member's settlement history.</p>
+
+<p>The demo scenario: member <code>memb_001</code> settled a full-price cataract surgery (CNY 12,800) at Shanghai Renji Hospital 3 days ago. Three claims via <code>POST /api/claims</code>, three mechanisms.</p>
+
+<p>The same surgery filed in Beijing — the rule engine answers in milliseconds, zero tokens:</p>
+
+<pre>curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Beijing Union Medical College Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Beijing","currency":"CNY"}'</pre>
+
+<blockquote><p><strong>BLOCK · RULES</strong> — <code>DUPLICATE_CROSS_CITY_CLAIM</code> — "Insured member settled procedure CATARACT_SURGERY in Shanghai within the last 7 days (prior claim claimhist_memb_001_CATARACT_SURGERY_3 on 2026-10-25) - duplicate cross-city reimbursement"</p></blockquote>
+
+<p>The same surgery back in Shanghai — same city, so the rule doesn't fire. The gray zone goes to the agent, which correlates the settled surgery with today's blocked Beijing attempt:</p>
+
+<pre>curl -s -X POST localhost:8082/paymentguard/api/claims -H "Content-Type: application/json" \
+  -d '{"member_id":"memb_001","provider":"Shanghai Renji Hospital","procedure":"CATARACT_SURGERY","diagnosis":"H25.9","amount":12800,"city":"Shanghai","currency":"CNY"}'</pre>
+
+<blockquote><p><strong>BLOCK · AGENT (deepseek-chat)</strong>, risk 92, confidence 0.9 — reasons <code>duplicate_reimbursement</code>, <code>same_procedure_multiple_cities</code>, <code>same_procedure_settled_3_days_ago</code>, <code>prior_attempt_blocked_today</code>, <code>amount_matches_duplicate_exactly</code> — "Member Zhang Wei already has CATARACT_SURGERY (H25.9) settled at Shanghai Renji Hospital on 2026-10-25 for CNY 12,800; a further identical claim was attempted at Beijing Union Medical College Hospital today and blocked, and now the same procedure/amount is presented again in Shanghai. This is a duplicate reimbursement attempt across providers/cities and should be declined and escalated." — 1,985 prompt + 154 completion tokens, 1.8 s.</p></blockquote>
+
+<p>And a claim from a blacklisted provider never reaches the LLM: <code>BLACKLISTED_MERCHANT</code>, instant block, zero tokens. The seed data ships four members, four hospitals and dialysis / surgery / imaging history, and the %UnitTest suite grew to 24 — claim endpoint mapping, the cross-city duplicate rule, the provider blacklist, and the agent-correlated claim flow.</p>
+
