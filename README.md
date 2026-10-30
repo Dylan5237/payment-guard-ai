@@ -22,7 +22,7 @@ A 4:47 walkthrough: instant rule decisions with zero LLM cost, the gray zone goi
 
 - **One command, fully containerized** — `docker compose up -d --build` starts IRIS (AI Hub EAP community image) plus the Web Gateway sidecar (see Quick start).
 - **Online demo** — [http://43.139.159.100:8082/paymentguard/](http://43.139.159.100:8082/paymentguard/): the live dashboard, the REST API at `/paymentguard/api` and the production behind it, deciding in live DeepSeek mode. Management Portal: http://43.139.159.100:8082/csp/sys/UtilHome.csp (`SuperUser` / `SYS`).
-- **IPM package** — module `paymentguard`: `zpm "install paymentguard"` installs classes, REST web apps and the dashboard.
+- **IPM package** — module `paymentguard`: `zpm "install paymentguard"` from the InterSystems package registry (or `zpm "load /path/to/payment-guard-ai"` from the clone) installs classes, REST web apps and the dashboard.
 - **Embedded Python inside** — two Python-native components in the decision path: the offline-trained logistic risk prior (`ml_model` in the risk context) and the transaction feature hasher behind vector similarity (see below). Both are `[Language = python]` methods, pure standard library, no pip packages.
 - **No API key? Mock mode** — the stack runs end-to-end offline: a deterministic engine answers in the same JSON contract, and the whole %UnitTest suite (33 tests) is green without any key.
 - **Operations guide** — [OPERATIONS.md](OPERATIONS.md): configuration (including swapping the model at runtime), health checks, failure playbook and security notes for reusing the stack beyond the demo.
@@ -97,11 +97,18 @@ Two further items close the loop around the gray zone: **"PaymentGuard Human Rev
 
   ```bash
   docker load -i iris-community-2026.3.0AI.154.0-docker.tar.gz
+  docker images                    # note the long name of the loaded image
+  docker tag <loaded image name> iris-community:2026.3.0AI.154.0
   docker pull containers.intersystems.com/intersystems/webgateway:latest-cd
   ```
 
-  > If the loaded tag differs from the one in the `Dockerfile`, adjust the
-  > `ARG IMAGE` line at the top.
+  The Dockerfile and `docker-compose.yml` use `iris-community:2026.3.0AI.154.0`; the
+  retag step is required because the loaded EAP image comes in with a long internal
+  name. The EAP image itself is not redistributed with this repository — judges load
+  it from the portal as above.
+
+  > If you prefer a different local tag, default `ARG IMAGE` at the top of the
+  > `Dockerfile` instead and keep it consistent with `docker-compose.yml`.
 
 > **Why a Web Gateway sidecar?** The 2026.3 AI Hub EAP builds are *NoPWS*: the
 > private web server on port 52773 is disabled and there is no Management
@@ -113,7 +120,7 @@ Two further items close the loop around the gray zone: **"PaymentGuard Human Rev
 ### Run
 
 ```bash
-git clone https://github.com/<you>/payment-guard-ai
+git clone https://github.com/Dylan5237/payment-guard-ai
 cd payment-guard-ai
 cp .env.example .env         # put your DEEPSEEK_API_KEY in it (or another provider)
 docker compose up -d --build # first build: ~2-3 min
@@ -127,6 +134,17 @@ Then open:
 | Management Portal (production, message viewer) | http://localhost:8082/csp/sys/UtilHome.csp — `SuperUser` / `SYS` |
 | REST API base | http://localhost:8082/paymentguard/api |
 | Production config | Portal → Interoperability → productions → `PaymentGuard.Production` |
+
+Check that it is working:
+
+```bash
+curl -s localhost:8082/paymentguard/api/health
+# {"app":"paymentguard","production_running":true,"provider":"deepseek","model":"deepseek-chat",
+#  "api_key_present":true,"agent_mode":"live"}
+```
+
+`production_running` must be `true`; `agent_mode` reports `live` with a key and `mock`
+without one.
 
 Without an API key the stack still runs end-to-end in **mock mode** (`/health` reports
 `agent_mode: "mock"`): the agent operation answers from a deterministic mock engine, so
