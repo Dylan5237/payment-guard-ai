@@ -32,33 +32,9 @@ A 4:47 walkthrough: instant rule decisions with zero LLM cost, the gray zone goi
 
 ## Architecture
 
-```
-                          ┌──────────────────────────────────────────────────────────┐
-   POST /paymentguard/api │                PaymentGuard.Production                    │
-  ────────────────────────►                                                          │
-        REST callers     │  ┌────────────┐    ┌─────────────────────┐                 │
-                          │  │ REST BS    │───►│ Decision BP         │                 │
-                          │  └────────────┘    │  1 persist attempt   │                 │
-                          │                    │  2 enrich (SQL)      │                 │
-                          │                    │  3 rules             │                 │
-                          │                    │     ├─ BLOCK/APPROVE │ (no LLM call)  │
-                          │                    │     └─ gray zone ────┼──┐             │
-                          │                    │  4 parse+validate    │  │             │
-                          │                    │  5 route             │  │             │
-                          │                    │  6 audit record      │  │             │
-                          │                    └─────────────────────┘  │             │
-                          │                          ▲    ▲            │             │
-                          │                          │    └────────────┼──────────┐  │
-                          │                          │                 ▼          ▼  │
-                          │              ┌───────────┴───┐  ┌─────────────────────────┴───┐
-                          │              │ Settlement BO │  │ AI Risk Agent operation     │
-                          │              │ ReviewQueueBO │  │ (in-process %AI.Agent):     │
-                          │              │ FraudAlertBO  │  │  PaymentGuard.Agent.        │
-                          │              └───────────────┘  │  RiskAgent + SQL tools      │
-                          │                                 │  → JSON decision + tokens   │
-                          │                                 └────────────────────────────┘
-                          └──────────────────────────────────────────────────────────┘
-```
+![PaymentGuard AI system architecture: Web Gateway sidecar, IRIS interoperability production with REST BS, Decision BP, AI Risk Agent, Settle/Review/Alert operations, the native Workflow Engine Human Review and Review Finalizer, and the vector-enabled IRIS database](docs/architecture.en.png)
+
+*Interactive version with pan/zoom, relationship tracing and per-node source links: [`docs/architecture.en.html`](docs/architecture.en.html) (download and open in a browser).*
 
 The production item **"PaymentGuard AI Risk Agent"** is the contest's centerpiece: an ordinary `Ens.BusinessOperation` that hosts the AI Hub agent in-process. A business process talks to the AI exactly like it talks to any other operation — queued, traced in the message viewer, retryable — while the operation internally runs `%AI.Agent`, persists the session and reports token usage.
 
