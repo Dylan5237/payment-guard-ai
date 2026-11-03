@@ -851,11 +851,18 @@ async function post(path, body) {
 }
 
 let queueChain = Promise.resolve();
+let lastDemoAction = 0;
 function hook(id, fn) {
   const b = armButton(id);
   b._armed = true;
   $(id).addEventListener("click", () => {
     if (b.disabled) return;
+    const now = Date.now();
+    if (now - lastDemoAction < 10000) {
+      toast("Demo actions are rate-limited — try again in " + Math.ceil((10000 - (now - lastDemoAction)) / 1000) + "s", 3000);
+      return;
+    }
+    lastDemoAction = now;
     markBusy(id, true); busy(true);
     queueChain = queueChain.then(async () => {
       try { await fn(); refreshAll(); }
@@ -1465,7 +1472,8 @@ $("wfbody").addEventListener("click", async e => {
 });
 
 refreshAll();
-setInterval(refreshAll, 3000);
+setInterval(() => { if (!document.hidden) refreshAll(); }, 6000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
 </script>
 </body>
 </html>
