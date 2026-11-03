@@ -426,6 +426,11 @@
   .dd-flow-table td { padding: 4px 8px; font-size: 11.5px; border-bottom: 1px solid var(--line); vertical-align: top; }
   .dd-flow-table tr:last-child td { border-bottom: 0; }
   .dd-flow-empty { color: var(--muted); font-size: 12px; padding: 6px 2px; }
+  .dd-sim-table { width: 100%; border-collapse: collapse; }
+  .dd-sim-table th { padding: 6px 8px; font-size: 9.5px; }
+  .dd-sim-table td { padding: 6px 8px; font-size: 11.5px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .dd-sim-table tr:last-child td { border-bottom: 0; }
+  .dd-sim-table .simbar { width: 70px; height: 5px; margin-top: 3px; }
   .dd-chips span { display: inline-block; background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; margin: 0 5px 5px 0; font-size: 11px; color: var(--muted); }
   .dd-chips .dd-muted { border: 0; background: none; padding: 0; }
   .dd-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 18px; }
@@ -1267,10 +1272,55 @@ hook("btn-claims", async () => {
 let selTr = null;
 let ddTxn = null;
 let ddFlowSeq = 0;
+let ddSimSeq = 0;
 
 function ddKV(label, value, mono) {
   const v = (value === undefined || value === null || value === "") ? "—" : value;
   return `<div class="dd-kv"><span>${esc(label)}</span><b class="${mono ? "mono" : ""}">${esc(v)}</b></div>`;
+}
+
+const similarCache = new Map();
+async function fetchSimilar(txnId, limit = 5) {
+  const key = txnId + ":" + limit;
+  if (!similarCache.has(key)) {
+    if (similarCache.size > 40) similarCache.clear();
+    const p = fetch(API + "/similar?txn_id=" + encodeURIComponent(txnId) + "&limit=" + limit)
+      .then(r => r.json())
+      .catch(e => { similarCache.delete(key); throw e; });
+    similarCache.set(key, p);
+  }
+  return similarCache.get(key);
+}
+const simBadge = status => status === "SETTLED" ? "APPROVE" : status === "BLOCKED" ? "BLOCK" : status === "REVIEW" ? "REVIEW" : "PLAIN";
+
+async function loadDecisionSimilar(x) {
+  const seq = ++ddSimSeq;
+  const box = $("dd-similar-body");
+  if (!box) return;
+  box.innerHTML = '<div class="dd-flow-empty">Loading neighbors…</div>';
+  try {
+    const r = await fetchSimilar(x.txn_id);
+    if (seq !== ddSimSeq) return;
+    const rows = r.results || [];
+    if (!rows.length) {
+      box.innerHTML = '<div class="dd-flow-empty">No neighbors above the similarity threshold for this transaction.</div>';
+      return;
+    }
+    box.innerHTML = '<table class="dd-sim-table"><thead><tr><th>Similarity</th><th>Transaction</th><th>Amount</th><th>Merchant / procedure</th><th>Status</th></tr></thead><tbody>' +
+      rows.map(y => {
+        const sim = Math.round((y.similarity ?? 0) * 1000) / 10;
+        const detail = [y.merchant, y.procedure, y.city].filter(Boolean).map(esc).join(" · ");
+        return `<tr>
+          <td><span class="simnum">${sim.toFixed(1)}</span><div class="simbar"><i style="width:${Math.min(100, sim)}%"></i></div></td>
+          <td><span class="mono">${esc(y.txn_id)}</span><br><b>${esc(y.customer_id)}</b></td>
+          <td class="mono">${(+y.amount).toLocaleString()} ${esc(y.currency || "")}</td>
+          <td>${detail || "—"}</td>
+          <td><span class="badge ${simBadge(y.status)}">${esc(y.status)}</span></td>
+        </tr>`;
+      }).join("") + "</tbody></table>";
+  } catch (e) {
+    if (seq === ddSimSeq) box.innerHTML = '<div class="dd-flow-empty">Similarity query failed: ' + esc(e.message) + '</div>';
+  }
 }
 
 async function loadDecisionFlow(x) {
@@ -1371,6 +1421,7 @@ function openDecision(txnId) {
     </div>
     <div class="dd-sec"><div class="dd-sec-h">Decision summary</div><p class="dd-summary">${esc(x.summary || "No summary recorded.")}</p></div>
     <div class="dd-sec"><div class="dd-sec-h">Flow replay</div><div id="dd-flow-body" class="dd-flow"><div class="dd-flow-empty">Loading trace…</div></div></div>
+    <div class="dd-sec"><div class="dd-sec-h">Similar transactions</div><div id="dd-similar-body" class="dd-similar"><div class="dd-flow-empty">Loading neighbors…</div></div></div>
     <div class="dd-sec"><div class="dd-sec-h">Reason codes</div><div class="dd-chips">${reasons.length ? reasons.map(r => `<span>${esc(r)}</span>`).join("") : '<span class="dd-muted">none</span>'}</div></div>
     <div class="dd-sec"><div class="dd-sec-h">Transaction</div><div class="dd-grid">
       ${ddKV("Transaction", x.txn_id, true)}
@@ -1391,10 +1442,12 @@ function openDecision(txnId) {
   $("ddetail").setAttribute("aria-hidden", "false");
   document.body.style.overflow = "hidden";
   loadDecisionFlow(x);
+  loadDecisionSimilar(x);
 }
 
 function closeDecision() {
   ddFlowSeq++;
+  ddSimSeq++;
   $("ddetail").classList.remove("open");
   $("ddetail").setAttribute("aria-hidden", "true");
   document.body.style.overflow = "";
@@ -1423,10 +1476,10 @@ $("btn-vec-seed").addEventListener("click", () => showSimilar("claimhist_memb_00
 
 async function showSimilar(txnId) {
   try {
-    const r = await (await fetch(API + "/similar?txn_id=" + encodeURIComponent(txnId) + "&limit=5")).json();
+    const r = await fetchSimilar(txnId);
     const rows = (r.results || []).map(x => {
       const sim = Math.round((x.similarity ?? 0) * 1000) / 10;
-      const st = x.status === "SETTLED" ? "APPROVE" : x.status === "BLOCKED" ? "BLOCK" : x.status === "REVIEW" ? "REVIEW" : "PLAIN";
+      const st = simBadge(x.status);
       return `<tr>
         <td><span class="simnum">${sim.toFixed(3)}</span><div class="simbar"><i style="width:${Math.min(100, sim)}%"></i></div></td>
         <td><span class="mono">${esc(x.txn_id)}</span><br><b>${esc(x.customer_id)}</b></td>
