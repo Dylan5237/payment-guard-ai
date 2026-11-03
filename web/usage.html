@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="graphite">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaymentGuard AI — 后台管理</title>
+<link rel="icon" type="image/png" href="logo.png">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("pg-theme-v2") || "graphite"; } catch (e) {}</script>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #111a2c; --panel2: #0e1626; --line: #1e2a41;
+    --text: #dbe4f0; --muted: #7d8ba3; --accent: #4f8ef7;
+    --ok: #2ecc8f; --warn: #f5a623; --bad: #f4547c; --ai: #9b6cf3;
+    --stat-a: #121c2f; --stat-b: #0f1728;
+    --glow-a: rgba(79,142,247,.09); --glow-b: rgba(155,108,243,.07);
+    --sub: #617089; --hover-line: #263650;
+    --panel-shadow: 0 12px 34px rgba(0,0,0,.16);
+    --scroll-thumb: rgba(125,139,163,.28); --scroll-thumb-hover: rgba(125,139,163,.46);
+    --accent-soft: rgba(79,142,247,.12); --accent-line: rgba(79,142,247,.34); --accent-ink: #fff;
+    --radius: 14px;
+  }
+  html[data-theme="graphite"] {
+    --bg: #0d0f12; --panel: #15181d; --panel2: #111418; --line: #262b33;
+    --text: #e6e9ee; --muted: #8b95a3; --accent: #2dd4bf;
+    --ok: #34d399; --warn: #fbbf24; --bad: #fb7185; --ai: #a78bfa;
+    --stat-a: #1a1e24; --stat-b: #14181d;
+    --glow-a: rgba(45,212,191,.08); --glow-b: rgba(167,139,250,.06);
+    --sub: #6b7480; --hover-line: #343b46;
+    --panel-shadow: 0 12px 34px rgba(0,0,0,.22);
+    --scroll-thumb: rgba(139,149,163,.28); --scroll-thumb-hover: rgba(139,149,163,.46);
+    --accent-soft: rgba(45,212,191,.10); --accent-line: rgba(45,212,191,.32); --accent-ink: #062b28;
+  }
+  html[data-theme="ink"] {
+    --bg: #0f0d0b; --panel: #191512; --panel2: #14110e; --line: #2c2621;
+    --text: #ece5db; --muted: #9a8f82; --accent: #e8a33d;
+    --ok: #6fbf8f; --warn: #e8a33d; --bad: #e06c5e; --ai: #b58cf0;
+    --stat-a: #1d1814; --stat-b: #171310;
+    --glow-a: rgba(232,163,61,.08); --glow-b: rgba(181,140,240,.05);
+    --sub: #7a6e61; --hover-line: #3a322a;
+    --panel-shadow: 0 12px 34px rgba(0,0,0,.26);
+    --scroll-thumb: rgba(154,143,130,.28); --scroll-thumb-hover: rgba(154,143,130,.46);
+    --accent-soft: rgba(232,163,61,.10); --accent-line: rgba(232,163,61,.32); --accent-ink: #2a1c05;
+  }
+  html[data-theme="paper"] {
+    --bg: #f3f5f9; --panel: #ffffff; --panel2: #f6f8fb; --line: #dde3ec;
+    --text: #172033; --muted: #5f6b7c; --accent: #2563eb;
+    --ok: #0f9d6e; --warn: #b45309; --bad: #d92d20; --ai: #7c3aed;
+    --stat-a: #ffffff; --stat-b: #f7f9fc;
+    --glow-a: rgba(37,99,235,.06); --glow-b: rgba(124,58,237,.04);
+    --sub: #6b7789; --hover-line: #c9d4e4;
+    --panel-shadow: 0 8px 24px rgba(23,32,51,.06);
+    --scroll-thumb: rgba(95,107,124,.24); --scroll-thumb-hover: rgba(95,107,124,.4);
+    --accent-soft: rgba(37,99,235,.07); --accent-line: rgba(37,99,235,.24); --accent-ink: #fff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  * { scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+  *::-webkit-scrollbar { width: 9px; height: 9px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+  *::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); border: 2px solid transparent; background-clip: padding-box; }
+  body {
+    max-width: 1560px; margin: 0 auto; padding: 24px 28px 56px;
+    color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+    background:
+      radial-gradient(1100px 520px at 18% -10%, var(--glow-a), transparent 60%),
+      radial-gradient(900px 480px at 100% -5%, var(--glow-b), transparent 55%),
+      var(--bg);
+    background-attachment: fixed;
+  }
+  header.topbar {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 0 2px 18px; margin-bottom: 20px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; flex-direction: column; gap: 2px; }
+  .brand h1 { font-size: 21px; font-weight: 600; letter-spacing: .2px; display: flex; align-items: center; }
+  .brand h1 img { height: 30px; width: auto; margin-right: 4px; vertical-align: -0.15em; }
+  .tagline { font-size: 11.5px; color: var(--muted); letter-spacing: .1px; }
+  .pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
+  .pill.live { color: var(--ok); border-color: var(--ok); }
+  .pill.down { color: var(--bad); border-color: var(--bad); }
+  .pill.warn { color: var(--warn); border-color: var(--warn); }
+  button { background: var(--accent); color: var(--accent-ink, #fff); border: 0; border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(1.05); }
+  button.secondary { background: var(--panel); border: 1px solid var(--line); color: var(--text); }
+  button:disabled { opacity: .55; cursor: wait; }
+  .back-btn {
+    display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px;
+    border: 1px solid var(--accent-line); border-radius: 8px; background: var(--panel);
+    color: var(--text); font-size: 12.5px; font-weight: 600; text-decoration: none;
+  }
+  .back-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .actions { margin-left: auto; display: flex; align-items: center; }
+  .gate {
+    flex-direction: row; align-items: center; flex-wrap: wrap; gap: 7px;
+    padding: 5px 6px 5px 10px; border: 1px solid var(--accent-line);
+    border-radius: 11px; background: var(--accent-soft);
+  }
+  .gate-label { font-size: 9px; font-weight: 700; letter-spacing: 1.1px; text-transform: uppercase; color: var(--accent); opacity: .9; white-space: nowrap; margin-right: 3px; }
+  .gate input, .gate select {
+    background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; font-size: 12.5px;
+  }
+  .gate input { width: 140px; }
+  .gate input:focus, .gate select:focus { outline: none; border-color: var(--accent); }
+  .gate button { padding: 7px 13px; border-radius: 8px; }
+  .theme-pick { position: relative; margin-left: 2px; }
+  .theme-btn { display: flex; align-items: center; gap: 7px; padding: 7px 9px; background: transparent; border: 1px solid transparent; color: var(--muted); border-radius: 8px; font-size: 11px; font-weight: 550; }
+  .theme-btn:hover { color: var(--text); background: var(--panel2); border-color: var(--line); }
+  .theme-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .theme-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 148px; display: none; padding: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--panel-shadow); }
+  .theme-menu.open { display: block; }
+  .theme-menu button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px; background: transparent; border: 0; border-radius: 7px; color: var(--text); font-size: 12px; font-weight: 500; text-align: left; }
+  .theme-menu button:hover { background: var(--panel2); }
+  .theme-menu .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .theme-menu .dot.navy { background: #4f8ef7; }
+  .theme-menu .dot.graphite { background: #2dd4bf; }
+  .theme-menu .dot.ink { background: #e8a33d; }
+  .theme-menu .dot.paper { background: #2563eb; }
+  .theme-menu .check { margin-left: auto; color: var(--accent); opacity: 0; font-weight: 700; }
+  .theme-menu button.on .check { opacity: 1; }
+
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, var(--stat-a) 0%, var(--stat-b) 100%);
+    border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 15px 18px 14px; box-shadow: var(--panel-shadow);
+  }
+  .stat::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); opacity: .9; }
+  .stat.ok::before { background: var(--ok); }
+  .stat.warn::before { background: var(--warn); }
+  .stat.bad::before { background: var(--bad); }
+  .stat .lbl { font-size: 10px; letter-spacing: 1.15px; color: var(--muted); text-transform: uppercase; }
+  .stat .num { font-size: 30px; line-height: 1.15; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .stat.ok .num { color: var(--ok); }
+  .stat.warn .num { color: var(--warn); }
+  .stat.bad .num { color: var(--bad); }
+  .stat .sub { display: block; font-size: 10.5px; color: var(--sub); margin-top: 2px; }
+  .stat-strip { grid-column: 1 / -1; display: flex; align-items: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 9px 4px; }
+  .mini { flex: 1; display: flex; align-items: baseline; gap: 10px; padding: 2px 16px; min-width: 0; }
+  .mini + .mini { border-left: 1px solid var(--line); }
+  .mini .lbl { font-size: 10px; letter-spacing: .75px; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
+  .mini b { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+
+  .cols { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(340px, .9fr); gap: 16px; align-items: start; }
+  .stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--panel-shadow); transition: border-color .18s ease; }
+  .panel:hover { border-color: var(--hover-line); }
+  .panel h2 { display: flex; align-items: baseline; flex-wrap: wrap; padding: 13px 18px; font-size: 11px; letter-spacing: 1.15px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); background: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,0)); }
+  .panel-sub { margin-left: 8px; font-size: 10.5px; letter-spacing: .1px; text-transform: none; color: var(--sub); font-weight: 400; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 9px 14px; border-bottom: 1px solid var(--line); font-size: 10px; text-transform: uppercase; letter-spacing: .55px; }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  .num-col { font-variant-numeric: tabular-nums; }
+  .mono { font-family: Consolas, ui-monospace, "Cascadia Mono", monospace; font-size: 12px; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .bar { height: 7px; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--ai)); opacity: .8; min-width: 2px; }
+  .panel-scroll { max-height: 470px; overflow-y: auto; }
+  .panel-scroll thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .empty { padding: 22px 16px; color: var(--muted); text-align: center; font-size: 12px; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 10.5px; font-weight: 600; background: var(--panel2); border: 1px solid var(--line); color: var(--text); }
+
+  .admin-actions { padding: 14px 18px; }
+  .admin-actions p { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  button.danger { background: var(--bad); color: #2a070c; }
+  #reseed-status { margin-left: 10px; font-size: 12px; color: var(--muted); }
+  #reseed-status.err { color: var(--bad); }
+  footer { margin-top: 20px; color: var(--muted); font-size: 11.5px; display: flex; gap: 16px; flex-wrap: wrap; }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  @media (max-width: 1150px) {
+    .cols { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    body { padding: 16px 14px 48px; }
+    .stats { grid-template-columns: 1fr; }
+    .stat-strip { flex-direction: column; align-items: stretch; padding: 4px 0; }
+    .mini { padding: 7px 16px; }
+    .mini + .mini { border-left: 0; border-top: 1px solid var(--line); }
+    .tagline { display: none; }
+    .actions { width: 100%; }
+    .gate { width: 100%; }
+    .gate input { flex: 1; width: auto; }
+    .back-btn { margin-left: auto; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <h1><img src="logo.png" alt="PaymentGuard AI"> PaymentGuard <span style="color:var(--ai)">AI</span></h1>
+    <div class="tagline">后台管理 · 匿名访问统计与演示数据</div>
+  </div>
+  <div class="status"><span class="pill" id="status">就绪</span></div>
+  <div class="actions gate">
+    <span class="gate-label">管理</span>
+    <input id="password" type="password" autocomplete="current-password" placeholder="密码" required>
+    <select id="days">
+      <option value="7">近 7 天</option>
+      <option value="30" selected>近 30 天</option>
+      <option value="90">近 90 天</option>
+    </select>
+    <button id="load" type="button">加载报表</button>
+  </div>
+  <a class="back-btn" href="/paymentguard/">← 返回仪表盘</a>
+  <div class="theme-pick" id="theme-pick" title="配色主题">
+    <button class="theme-btn" id="theme-btn" aria-haspopup="listbox" aria-expanded="false">
+      <span class="theme-dot" id="theme-dot"></span>
+      <span id="theme-label">Graphite</span>
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+    </button>
+    <div class="theme-menu" id="theme-menu" role="listbox" aria-label="配色主题">
+      <button data-theme="navy" role="option"><span class="dot navy"></span>Navy<span class="check">&#10003;</span></button>
+      <button data-theme="graphite" role="option"><span class="dot graphite"></span>Graphite<span class="check">&#10003;</span></button>
+      <button data-theme="ink" role="option"><span class="dot ink"></span>Ink<span class="check">&#10003;</span></button>
+      <button data-theme="paper" role="option"><span class="dot paper"></span>Paper<span class="check">&#10003;</span></button>
+    </div>
+  </div>
+</header>
+
+<section id="summary" class="stats" hidden></section>
+
+<div class="cols">
+  <div class="stack">
+    <section class="panel" id="panel-daily" hidden>
+      <h2>每日访问量 <span class="panel-sub">UTC · 所选范围</span></h2>
+      <div class="panel-scroll">
+        <table>
+          <thead><tr><th>日期</th><th>访问量</th><th>独立访客</th><th style="width:42%"></th></tr></thead>
+          <tbody id="daily-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-recent" hidden>
+      <h2>最近事件 <span class="panel-sub">最新 30 条</span></h2>
+      <div class="panel-scroll">
+        <table>
+          <thead><tr><th>时间（UTC）</th><th>事件</th><th>路径</th><th>访客</th><th>来源 / UA</th></tr></thead>
+          <tbody id="recent-body"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="panel" id="panel-events" hidden>
+      <h2>事件分布</h2>
+      <table><tbody id="events-body"></tbody></table>
+    </section>
+
+    <section class="panel" id="panel-refs" hidden>
+      <h2>访问来源</h2>
+      <table><tbody id="refs-body"></tbody></table>
+    </section>
+
+    <section class="panel" id="panel-admin">
+      <h2>演示数据</h2>
+      <div class="admin-actions">
+        <p>重置将清空客户、交易、决策、案件和未处理的审核任务，并重新生成一套演示数据。</p>
+        <button id="reseed" class="danger" type="button">重置演示数据</button>
+        <span id="reseed-status"></span>
+      </div>
+    </section>
+  </div>
+</div>
+
+<footer>
+  <span>数据存储：IRIS 命名空间 IRISAPP · <span class="mono">PaymentGuard_Data.UsageEvent</span></span>
+  <a href="/paymentguard/">PaymentGuard 仪表盘</a>
+</footer>
+
+<script>
+const API = "/paymentguard/api";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const n = v => (+v || 0).toLocaleString();
+const EVENT_LABEL = { page_view: "页面访问", flow_open: "打开 Flow", decision_open: "打开决策详情" };
+const evLabel = e => EVENT_LABEL[e] || e;
+
+// ── Theme (same storage key as the dashboard) ─────────────
+const THEMES = ["navy", "graphite", "ink", "paper"];
+const THEME_LABEL = { navy: "Navy", graphite: "Graphite", ink: "Ink", paper: "Paper" };
+function applyTheme(t) {
+  if (!THEMES.includes(t)) t = "graphite";
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("pg-theme-v2", t); } catch (e) {}
+  $("theme-label").textContent = THEME_LABEL[t];
+  document.querySelectorAll("#theme-menu button[data-theme]").forEach(b => b.classList.toggle("on", b.dataset.theme === t));
+}
+applyTheme((() => { try { return localStorage.getItem("pg-theme-v2") || "graphite"; } catch (e) { return "graphite"; } })());
+
+const themeBtn = $("theme-btn"), themeMenu = $("theme-menu");
+function closeThemeMenu() {
+  themeMenu.classList.remove("open");
+  themeBtn.setAttribute("aria-expanded", "false");
+}
+themeBtn.addEventListener("click", e => {
+  e.stopPropagation();
+  const open = !themeMenu.classList.contains("open");
+  themeMenu.classList.toggle("open", open);
+  themeBtn.setAttribute("aria-expanded", open);
+});
+themeMenu.querySelectorAll("button[data-theme]").forEach(b => b.addEventListener("click", () => {
+  applyTheme(b.dataset.theme);
+  closeThemeMenu();
+}));
+document.addEventListener("click", e => { if (!themeMenu.contains(e.target) && e.target !== themeBtn) closeThemeMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeThemeMenu(); });
+
+// ── Admin data ────────────────────────────────────────────
+let password = "";
+try { password = sessionStorage.getItem("pg-admin-password") || ""; } catch (e) {}
+if (password) $("password").value = password;
+
+$("load").addEventListener("click", load);
+$("password").addEventListener("keydown", e => { if (e.key === "Enter") load(); });
+$("days").addEventListener("change", () => { if (!$("summary").hidden) load(); });
+$("reseed").addEventListener("click", reseed);
+
+function setStatus(msg, kind) {
+  const s = $("status");
+  s.textContent = msg;
+  s.className = "pill" + (kind ? " " + kind : "");
+}
+
+async function load() {
+  password = $("password").value.trim();
+  if (!password) { setStatus("请输入管理密码", "warn"); return; }
+  try { sessionStorage.setItem("pg-admin-password", password); } catch (e) {}
+  setStatus("加载中…");
+  try {
+    const res = await fetch(API + "/admin/usage?days=" + encodeURIComponent($("days").value), {
+      headers: { "X-Admin-Password": password }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(res.status === 401 ? "密码错误或未填写" : (data.error || ("HTTP " + res.status)));
+    render(data);
+    setStatus("已更新 " + data.generated_at + " UTC", "live");
+  } catch (err) {
+    setStatus("错误：" + err.message, "down");
+  }
+}
+
+async function reseed() {
+  const pw = $("password").value.trim();
+  if (!pw) { setStatus("请先输入管理密码", "warn"); $("reseed-status").textContent = ""; return; }
+  if (!confirm("确定重置演示数据？当前所有交易、决策和审核任务都会被清空。")) return;
+  try { sessionStorage.setItem("pg-admin-password", pw); } catch (e) {}
+  $("reseed").disabled = true;
+  $("reseed-status").className = "";
+  $("reseed-status").textContent = "正在重置…";
+  try {
+    const res = await fetch(API + "/admin/reseed", {
+      method: "POST",
+      headers: { "X-Admin-Password": pw }
+    });
+    const text = await res.text();
+    // the endpoint echoes Ens.Director log lines before the JSON body on success
+    let data = {};
+    try { data = JSON.parse(text); } catch (e) {
+      const i = text.indexOf("{");
+      if (i >= 0) { try { data = JSON.parse(text.slice(i)); } catch (e2) {} }
+    }
+    if (!res.ok || data.error) throw new Error(res.status === 401 ? "密码错误或未填写" : (data.error || ("HTTP " + res.status)));
+    if (!data.reseeded) throw new Error("响应异常：" + text.slice(0, 120));
+    $("reseed-status").textContent = "已重置 — 演示数据已刷新。";
+  } catch (err) {
+    $("reseed-status").className = "err";
+    $("reseed-status").textContent = "重置失败：" + err.message;
+  } finally {
+    $("reseed").disabled = false;
+  }
+}
+
+function show(id, on) { $(id).hidden = !on; }
+
+function render(d) {
+  const t = d.total || {}, today = d.today || {};
+  const events = d.events || [];
+  const ev = name => (+((events.find(x => x.event === name) || {}).count) || 0);
+  $("summary").innerHTML = `
+    <div class="stat">
+      <span class="lbl">总访问量</span>
+      <div class="num">${n(t.views)}</div>
+      <span class="sub">所选范围</span>
+    </div>
+    <div class="stat ok">
+      <span class="lbl">独立访客</span>
+      <div class="num">${n(t.visitors)}</div>
+      <span class="sub">按浏览器去重</span>
+    </div>
+    <div class="stat">
+      <span class="lbl">会话数</span>
+      <div class="num">${n(t.sessions)}</div>
+      <span class="sub">浏览会话</span>
+    </div>
+    <div class="stat warn">
+      <span class="lbl">今日访问</span>
+      <div class="num">${n(today.views)}</div>
+      <span class="sub">UTC 日期</span>
+    </div>
+    <div class="stat-strip">
+      <div class="mini"><span class="lbl">今日访客</span><b>${n(today.visitors)}</b></div>
+      <div class="mini"><span class="lbl">打开 Flow</span><b>${n(ev("flow_open"))}</b></div>
+      <div class="mini"><span class="lbl">打开决策详情</span><b>${n(ev("decision_open"))}</b></div>
+    </div>`;
+  show("summary", true);
+
+  const daily = d.daily || [];
+  const max = Math.max(1, ...daily.map(x => +x.views || 0));
+  $("daily-body").innerHTML = daily.map(x => `
+    <tr>
+      <td class="mono">${esc(x.date)}</td>
+      <td class="num-col">${n(x.views)}</td>
+      <td class="num-col">${n(x.visitors)}</td>
+      <td>${(+x.views || 0) ? `<div class="bar" style="width:${Math.round((+x.views || 0) / max * 100)}%"></div>` : ""}</td>
+    </tr>`).join("") || `<tr><td colspan="4" class="empty">暂无访问记录。</td></tr>`;
+  show("panel-daily", true);
+
+  $("events-body").innerHTML = events.map(x => `<tr><td><span class="tag">${esc(evLabel(x.event))}</span></td><td class="num-col">${n(x.count)}</td></tr>`).join("") || `<tr><td class="empty">暂无事件。</td></tr>`;
+  show("panel-events", true);
+
+  const refs = d.referrers || [];
+  $("refs-body").innerHTML = refs.map(x => `<tr><td class="mono">${esc(x.referrer === "(direct)" ? "（直接访问）" : x.referrer)}</td><td class="num-col">${n(x.count)}</td></tr>`).join("") || `<tr><td class="empty">暂无来源。</td></tr>`;
+  show("panel-refs", true);
+
+  const recent = d.recent || [];
+  $("recent-body").innerHTML = recent.map(x => `
+    <tr>
+      <td class="mono">${esc(x.time)}</td>
+      <td><span class="tag">${esc(evLabel(x.event))}</span></td>
+      <td class="mono">${esc(x.path)}</td>
+      <td class="mono muted">${esc(x.visitor)}</td>
+      <td class="muted" style="font-size:11.5px">${esc(x.referrer ? x.referrer : "（直接访问）")}<br><span title="${esc(x.ua)}">${esc(x.ua)}</span></td>
+    </tr>`).join("") || `<tr><td colspan="5" class="empty">暂无事件。</td></tr>`;
+  show("panel-recent", true);
+}
+</script>
+</body>
+</html>

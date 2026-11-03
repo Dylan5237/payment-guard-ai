@@ -2,7 +2,7 @@ Include (%occStatus)
 
 /// REST API for PaymentGuard. Mounted at /paymentguard/api by the module.
 /// Decision and inspection endpoints are unauthenticated on purpose for the
-/// demo; admin endpoints (/admin/*) require the X-Admin-Token shared secret.
+/// demo; admin endpoints (/admin/*) require the X-Admin-Password header.
 /// See README and OPERATIONS.md for production notes.
 Class PaymentGuard.REST.Dispatch Extends %CSP.REST
 {
@@ -27,6 +27,7 @@ XData UrlMap
   <Route Url="/transactions" Method="GET" Call="ListTransactions"/>
   <Route Url="/similar" Method="GET" Call="SimilarTransactions"/>
   <Route Url="/trace" Method="GET" Call="Trace"/>
+  <Route Url="/trace/txn" Method="GET" Call="TraceByTxn"/>
   <Route Url="/messages" Method="GET" Call="Messages"/>
   <Route Url="/reasoning" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions" Method="GET" Call="ListDecisions"/>
@@ -34,9 +35,11 @@ XData UrlMap
   <Route Url="/reviews" Method="GET" Call="ListReviews"/>
   <Route Url="/reviews/decide" Method="POST" Call="DecideReview"/>
   <Route Url="/stats" Method="GET" Call="Stats"/>
+  <Route Url="/usage/event" Method="POST" Call="RecordUsage"/>
   <Route Url="/admin/model" Method="GET" Call="GetModelSettings"/>
   <Route Url="/admin/model" Method="PUT" Call="PutModelSettings"/>
   <Route Url="/admin/reseed" Method="POST" Call="Reseed"/>
+  <Route Url="/admin/usage" Method="GET" Call="UsageReport"/>
   <!-- .csp-suffixed twins: the Web Gateway's Apache module only intercepts
        requests whose path carries a listed file extension, so the gateway
        rewrites extensionless REST URLs to *.csp before they reach IRIS -->
@@ -47,6 +50,7 @@ XData UrlMap
   <Route Url="/transactions.csp" Method="GET" Call="ListTransactions"/>
   <Route Url="/similar.csp" Method="GET" Call="SimilarTransactions"/>
   <Route Url="/trace.csp" Method="GET" Call="Trace"/>
+  <Route Url="/trace/txn.csp" Method="GET" Call="TraceByTxn"/>
   <Route Url="/messages.csp" Method="GET" Call="Messages"/>
   <Route Url="/reasoning.csp" Method="GET" Call="Reasoning"/>
   <Route Url="/decisions.csp" Method="GET" Call="ListDecisions"/>
@@ -54,9 +58,11 @@ XData UrlMap
   <Route Url="/reviews.csp" Method="GET" Call="ListReviews"/>
   <Route Url="/reviews/decide.csp" Method="POST" Call="DecideReview"/>
   <Route Url="/stats.csp" Method="GET" Call="Stats"/>
+  <Route Url="/usage/event.csp" Method="POST" Call="RecordUsage"/>
   <Route Url="/admin/model.csp" Method="GET" Call="GetModelSettings"/>
   <Route Url="/admin/model.csp" Method="PUT" Call="PutModelSettings"/>
   <Route Url="/admin/reseed.csp" Method="POST" Call="Reseed"/>
+  <Route Url="/admin/usage.csp" Method="GET" Call="UsageReport"/>
 </Routes>
 }
 
@@ -290,6 +296,71 @@ ClassMethod Trace() As %Status
     Quit ..WriteJSON({"now": ($ZDATETIME($HOROLOG, 3, 1)), "hops": (arr)})
 }
 
+/// Message trace for one transaction id (decision detail modal). Scans a
+/// narrow time window around the decision and matches TxnId in message bodies.
+ClassMethod TraceByTxn() As %Status
+{
+    Set txn = $ZStrip(%request.Get("txn_id"), "<>W")
+    If txn = "" Quit ..WriteError(400, "txn_id is required")
+    Set at = $ZStrip(%request.Get("at"), "<>W")
+
+    Set filter = ""
+    If at '= "" {
+        Try {
+            Set h = $ZDATETIMEH(at, 3, 1)
+            Set d = $Piece(h, ",", 1), s = $Piece(h, ",", 2)
+            Set s0 = s - 900
+            If s0 < 0 Set s0 = s0 + 86400, d = d - 1
+            Set start = $ZDATETIME(d_","_s0, 3, 1)
+            Set d1 = d, s1 = s + 120
+            If s1 >= 86400 Set s1 = s1 - 86400, d1 = d1 + 1
+            Set end = $ZDATETIME(d1_","_s1, 3, 1)
+            Set filter = " WHERE TimeCreated >= ? AND TimeCreated <= ?"
+        } Catch ex {
+            Set filter = ""
+        }
+    }
+
+    Set sessions = {}
+    Set hStmt = ##class(%SQL.Statement).%New()
+    Set sql = "SELECT TOP 800 ID, SessionId, MessageBodyClassName, MessageBodyId FROM Ens.MessageHeader"_filter_" ORDER BY ID DESC"
+    Set hSC = hStmt.%Prepare(sql)
+    If $$$ISERR(hSC) Quit ..WriteError(500, $System.Status.GetErrorText(hSC))
+    Set hRS = $Select(filter = "": hStmt.%Execute(), 1: hStmt.%Execute(start, end))
+    While hRS.%Next() {
+        Set cls = hRS.%Get("MessageBodyClassName")
+        If (cls '= "PaymentGuard.Request.Payment") && (cls '= "PaymentGuard.Response.Decision") && (cls '= "PaymentGuard.Msg.DecisionMade") && (cls '= "PaymentGuard.Request.AgentDecision") Continue
+        Set body = ""
+        Try { Set body = $CLASSMETHOD(cls, "%OpenId", hRS.%Get("MessageBodyId")) } Catch ex { Set body = "" }
+        If '$IsObject(body) Continue
+        Set bTxn = ""
+        Try { Set bTxn = body.TxnId } Catch ex { Set bTxn = "" }
+        If bTxn = txn Set sessions(hRS.%Get("SessionId")) = 1
+    }
+
+    Set arr = []
+    Set sid = ""
+    For {
+        Set sid = $Order(sessions(sid))
+        Quit:sid=""
+        Set tStmt = ##class(%SQL.Statement).%New()
+        Set tSC = tStmt.%Prepare("SELECT ID, SessionId, SourceConfigName, TargetConfigName, TimeCreated, MessageBodyClassName FROM Ens.MessageHeader WHERE SessionId = ? ORDER BY ID ASC")
+        If $$$ISERR(tSC) Continue
+        Set tRS = tStmt.%Execute(sid)
+        While tRS.%Next() {
+            Set row = {}
+            Do row.%Set("id", tRS.%Get("ID"))
+            Do row.%Set("session", tRS.%Get("SessionId"))
+            Do row.%Set("source", tRS.%Get("SourceConfigName"))
+            Do row.%Set("target", tRS.%Get("TargetConfigName"))
+            Do row.%Set("time", tRS.%Get("TimeCreated"))
+            Do row.%Set("body", tRS.%Get("MessageBodyClassName"))
+            Do arr.%Push(row)
+        }
+    }
+    Quit ..WriteJSON({"txn_id": (txn), "hops": (arr)})
+}
+
 /// Every message hop of one production session, with the actual message body
 /// content — the same objects the Message Viewer shows. Session = Ens.MessageHeader
 /// SessionId (the task queue in the dashboard carries it).
@@ -373,16 +444,35 @@ ClassMethod Reasoning() As %Status
 /// Recent decisions with full observability detail
 ClassMethod ListDecisions() As %Status
 {
+    Set page = +(%request.Data("page", 1))
+    If page < 1 Set page = 1
     Set limit = +(%request.Data("limit", 1))
-    If limit < 1 Set limit = 20
+    If limit < 1 Set limit = 25
     If limit > 200 Set limit = 200
+
+    Set total = 0
+    Set cStmt = ##class(%SQL.Statement).%New()
+    Set cSC = cStmt.%Prepare("SELECT COUNT(*) AS Cnt FROM PaymentGuard_Data.Decision")
+    If $$$ISERR(cSC) Quit ..WriteError(500, $System.Status.GetErrorText(cSC))
+    Set cRS = cStmt.%Execute()
+    If cRS.%Next() Set total = +cRS.%Get("Cnt")
+
+    Set pages = (total + limit - 1) \ limit
+    If pages < 1 Set pages = 1
+    If page > pages Set page = pages
+    Set skip = (page - 1) * limit
+    Set fetch = page * limit
+
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
     Set sql = "SELECT TOP ? d.TxnId, d.CustomerId, d.Amount, d.Action, d.Source, d.RiskScore, d.Confidence, d.ReasonCodes, d.Summary, d.Model, d.SessionId, d.PromptTokens, d.CompletionTokens, d.ToolCalls, d.LatencyMs, d.ReviewedBy, d.CreatedAt, t.Merchant, t.GeoCountry FROM PaymentGuard_Data.Decision d LEFT JOIN PaymentGuard_Data.""Transaction"" t ON t.TxnId = d.TxnId ORDER BY d.ID DESC"
     Set tSC = tStmt.%Prepare(sql)
     If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
-    Set tRS = tStmt.%Execute(limit)
+    Set tRS = tStmt.%Execute(fetch)
+    Set idx = 0
     While tRS.%Next() {
+        Set idx = idx + 1
+        If idx <= skip Continue
         Set row = {}
         Do row.%Set("txn_id", tRS.%Get("TxnId"))
         Do row.%Set("customer_id", tRS.%Get("CustomerId"))
@@ -414,21 +504,40 @@ ClassMethod ListDecisions() As %Status
         Do row.%Set("created_at", tRS.%Get("CreatedAt"))
         Do arr.%Push(row)
     }
-    Quit ..WriteJSON({"decisions": (arr)})
+    Quit ..WriteJSON({"decisions": (arr), "page": (page), "page_size": (limit), "total": (total), "pages": (pages)})
 }
 
 /// Review cases and fraud alerts
 ClassMethod ListCases() As %Status
 {
+    Set page = +(%request.Data("page", 1))
+    If page < 1 Set page = 1
     Set limit = +(%request.Data("limit", 1))
-    If limit < 1 Set limit = 20
+    If limit < 1 Set limit = 12
     If limit > 200 Set limit = 200
+
+    Set total = 0
+    Set cStmt = ##class(%SQL.Statement).%New()
+    Set cSC = cStmt.%Prepare("SELECT COUNT(*) AS Cnt FROM PaymentGuard_Data.CaseRecord")
+    If $$$ISERR(cSC) Quit ..WriteError(500, $System.Status.GetErrorText(cSC))
+    Set cRS = cStmt.%Execute()
+    If cRS.%Next() Set total = +cRS.%Get("Cnt")
+
+    Set pages = (total + limit - 1) \ limit
+    If pages < 1 Set pages = 1
+    If page > pages Set page = pages
+    Set skip = (page - 1) * limit
+    Set fetch = page * limit
+
     Set arr = []
     Set tStmt = ##class(%SQL.Statement).%New()
     Set tSC = tStmt.%Prepare("SELECT TOP ? CaseId, TxnId, CustomerId, Type, Priority, RiskScore, Status, Resolution, ResolvedBy, Summary, CreatedAt FROM PaymentGuard_Data.CaseRecord ORDER BY ID DESC")
     If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
-    Set tRS = tStmt.%Execute(limit)
+    Set tRS = tStmt.%Execute(fetch)
+    Set idx = 0
     While tRS.%Next() {
+        Set idx = idx + 1
+        If idx <= skip Continue
         Set row = {}
         Do row.%Set("case_id", tRS.%Get("CaseId"))
         Do row.%Set("txn_id", tRS.%Get("TxnId"))
@@ -443,7 +552,7 @@ ClassMethod ListCases() As %Status
         Do row.%Set("created_at", tRS.%Get("CreatedAt"))
         Do arr.%Push(row)
     }
-    Quit ..WriteJSON({"cases": (arr)})
+    Quit ..WriteJSON({"cases": (arr), "page": (page), "page_size": (limit), "total": (total), "pages": (pages)})
 }
 
 /// Open human-review tasks from the native Workflow Engine (EnsLib.Workflow).
@@ -451,16 +560,18 @@ ClassMethod ListCases() As %Status
 /// actions each task via /reviews/decide.
 ClassMethod ListReviews() As %Status
 {
-    Set limit = +(%request.Get("limit", 20))
-    If limit < 1 Set limit = 20
+    Set page = +(%request.Data("page", 1))
+    If page < 1 Set page = 1
+    Set limit = +(%request.Data("limit", 1))
+    If limit < 1 Set limit = 10
     If limit > 100 Set limit = 100
-    Set arr = []
+
+    Set all = []
     Set tStmt = ##class(%SQL.Statement).%New()
-    Set tSC = tStmt.%Prepare("SELECT TOP 200 ID FROM EnsLib_Workflow.TaskResponse ORDER BY ID DESC")
+    Set tSC = tStmt.%Prepare("SELECT TOP 500 ID FROM EnsLib_Workflow.TaskResponse ORDER BY ID DESC")
     If $$$ISERR(tSC) Quit ..WriteError(500, $System.Status.GetErrorText(tSC))
     Set tRS = tStmt.%Execute()
     While tRS.%Next() {
-        If arr.%Size() >= limit Quit
         Set t = ##class(EnsLib.Workflow.TaskResponse).%OpenId(tRS.%Get("ID"))
         If '$IsObject(t) Continue
         If t.%TaskStatus.IsComplete Continue
@@ -486,9 +597,21 @@ ClassMethod ListReviews() As %Status
             Do row.%Set("summary", info.%Get("summary"))
             Do row.%Set("source", info.%Get("source"))
         }
-        Do arr.%Push(row)
+        Do all.%Push(row)
     }
-    Quit ..WriteJSON({"reviews": (arr)})
+
+    Set total = all.%Size()
+    Set pages = (total + limit - 1) \ limit
+    If pages < 1 Set pages = 1
+    If page > pages Set page = pages
+    Set start = (page - 1) * limit
+    Set arr = []
+    Set i = start
+    While (i < total) && (i < (start + limit)) {
+        Do arr.%Push(all.%Get(i))
+        Set i = i + 1
+    }
+    Quit ..WriteJSON({"reviews": (arr), "page": (page), "page_size": (limit), "total": (total), "pages": (pages)})
 }
 
 /// Take a human-review action on one Workflow task: claim it for the reviewer
@@ -595,14 +718,47 @@ ClassMethod Stats() As %Status
     Quit ..WriteJSON(o)
 }
 
+/// Anonymous page/engagement beacon from the dashboard. No raw IP is stored.
+ClassMethod RecordUsage() As %Status
+{
+    Set body = ..ReadBody()
+    If '$IsObject(body) Quit ..WriteError(400, "invalid JSON body")
+    Set event = $ZStrip(body.%Get("event"), "<>W")
+    If event = "" Set event = "page_view"
+    If (event '= "page_view") && (event '= "flow_open") && (event '= "decision_open") Quit ..WriteError(400, "unknown event")
+
+    Set rec = ##class(PaymentGuard.Data.UsageEvent).%New()
+    Set rec.Event = event
+    Set rec.Path = $Extract(body.%Get("path"), 1, 200)
+    Set rec.VisitorId = $Extract($ZStrip(body.%Get("visitor_id"), "<>W"), 1, 64)
+    Set rec.SessionId = $Extract($ZStrip(body.%Get("session_id"), "<>W"), 1, 64)
+    Set rec.Referrer = $Extract(body.%Get("referrer"), 1, 300)
+    Set rec.UserAgent = $Extract(%request.GetCgiEnv("HTTP_USER_AGENT"), 1, 300)
+
+    Set sc = rec.%Save()
+    If $$$ISERR(sc) Quit ..WriteError(500, "could not record usage event")
+    Quit ..WriteJSON({"ok": (1)})
+}
+
+/// Usage report for the dashboard owner. Requires the admin token.
+ClassMethod UsageReport() As %Status
+{
+    Set pw = ##class(PaymentGuard.Util.Config).AdminPassword()
+    If pw = "" Quit ..WriteError(503, "No admin password configured - set ADMIN_PASSWORD or ^PaymentGuardSettings(""AdminPassword"")")
+    If %request.GetCgiEnv("HTTP_X_ADMIN_PASSWORD") '= pw Quit ..WriteError(401, "Invalid or missing X-Admin-Password header")
+    Set days = +(%request.Get("days"))
+    If days = 0 Set days = 30
+    Quit ..WriteJSON(##class(PaymentGuard.Util.Usage).Report(days))
+}
+
 /// Reseed demo data. Stops the production first: wiping tables while
 /// requests are in flight poisons the shutdown state and wedges every
 /// subsequent start (ErrProductionNotShutdownCleanly).
 ClassMethod Reseed() As %Status
 {
-    Set token = ##class(PaymentGuard.Util.Config).AdminToken()
-    If token = "" Quit ..WriteError(503, "No admin token configured - set ADMIN_TOKEN in .env (or ^PaymentGuardSettings(""AdminToken"")) before calling admin endpoints")
-    If %request.GetCgiEnv("HTTP_X_ADMIN_TOKEN") '= token Quit ..WriteError(401, "Invalid or missing X-Admin-Token header")
+    Set pw = ##class(PaymentGuard.Util.Config).AdminPassword()
+    If pw = "" Quit ..WriteError(503, "No admin password configured - set ADMIN_PASSWORD or ^PaymentGuardSettings(""AdminPassword"")")
+    If %request.GetCgiEnv("HTTP_X_ADMIN_PASSWORD") '= pw Quit ..WriteError(401, "Invalid or missing X-Admin-Password header")
     Set sc = ##class(PaymentGuard.Util.Setup).ResetDemo()
     If $$$ISERR(sc) Quit ..WriteError(500, $System.Status.GetErrorText(sc))
     Quit ..WriteJSON({"reseeded": (1)})
@@ -634,9 +790,9 @@ ClassMethod GetModelSettings() As %Status
 /// the next decision — no restart needed.
 ClassMethod PutModelSettings() As %Status
 {
-    Set token = ##class(PaymentGuard.Util.Config).AdminToken()
-    If token = "" Quit ..WriteError(503, "No admin token configured - set ADMIN_TOKEN in .env (or ^PaymentGuardSettings(""AdminToken"")) before calling admin endpoints")
-    If %request.GetCgiEnv("HTTP_X_ADMIN_TOKEN") '= token Quit ..WriteError(401, "Invalid or missing X-Admin-Token header")
+    Set pw = ##class(PaymentGuard.Util.Config).AdminPassword()
+    If pw = "" Quit ..WriteError(503, "No admin password configured - set ADMIN_PASSWORD or ^PaymentGuardSettings(""AdminPassword"")")
+    If %request.GetCgiEnv("HTTP_X_ADMIN_PASSWORD") '= pw Quit ..WriteError(401, "Invalid or missing X-Admin-Password header")
     Set body = ..ReadBody()
     If '$IsObject(body) Quit ..WriteError(400, "Invalid or missing JSON body")
 

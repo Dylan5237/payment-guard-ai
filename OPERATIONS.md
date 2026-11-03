@@ -51,7 +51,7 @@ apply to the next request without a restart.
 | API key | `<PROVIDER>_API_KEY` or `AI_API_KEY` | `PUT /admin/model {"api_key":...}` | never returned by GET |
 | Base URL | `AI_BASE_URL` | `PUT /admin/model {"base_url":...}` | OpenAI-compatible gateways |
 | Mock mode | `AGENT_MOCK=1` | `PUT /admin/model {"mock":true/false}` | deterministic offline engine |
-| Admin token | `ADMIN_TOKEN` | `^PaymentGuardSettings("AdminToken")` | required by `/admin/*` |
+| Admin password | `ADMIN_PASSWORD` | `^PaymentGuardSettings("AdminPassword")` | required by `/admin/*` |
 
 Reading current effective values (each field reports its source):
 
@@ -64,7 +64,7 @@ Setting the key at runtime (takes effect on the next decision):
 ```bash
 curl -X PUT http://localhost:8082/paymentguard/api/admin/model \
   -H "Content-Type: application/json" \
-  -H "X-Admin-Token: $ADMIN_TOKEN" \
+  -H "X-Admin-Password: $ADMIN_PASSWORD" \
   -d '{"provider":"openai","model":"gpt-4o-mini","api_key":"sk-..."}'
 ```
 
@@ -74,11 +74,13 @@ Env var changes require recreating the IRIS container
 ## Routine operations
 
 **Reseed demo data** (wipes customers/transactions/decisions/cases, cancels
-open workflow tasks, restarts the production):
+open workflow tasks, restarts the production). The admin page
+(`/paymentguard/usage.html`, reached by double-clicking the dashboard logo)
+also shows anonymous usage stats and has a reseed button:
 
 ```bash
 curl -X POST http://localhost:8082/paymentguard/api/admin/reseed \
-  -H "X-Admin-Token: $ADMIN_TOKEN"
+  -H "X-Admin-Password: $ADMIN_PASSWORD"
 ```
 
 **Logs**: `docker compose logs iris` (interoperability + `messages.log`),
@@ -142,8 +144,9 @@ The demo ships deliberately open. For anything exposed beyond a demo:
   authentication in front (the Web Gateway supports it, or an API gateway):
   at minimum require auth on `POST /payments`, `POST /claims`,
   `POST /reviews/decide`, and all of `/admin/*`.
-- **Admin token**: set `ADMIN_TOKEN` (the endpoints refuse to run without one)
-  and rotate it via `^PaymentGuardSettings("AdminToken")` if it leaks.
+- **Admin password**: set `ADMIN_PASSWORD` (or the
+  `^PaymentGuardSettings("AdminPassword")` runtime override); the admin
+  endpoints refuse to run without one.
 - **Portal**: the demo grants `UnknownUser` the `%All` role and unauthenticated
   access to `/paymentguard/*` web apps (see `iris.script` and
   `PaymentGuard.Util.Setup`). Remove both grants, disable

@@ -137,7 +137,7 @@ dependencies. Add a key and recreate the container to go live.
 | `AI_API_KEY` | — | Generic fallback key |
 | `AI_BASE_URL` | — | Optional custom endpoint for OpenAI-compatible servers |
 | `AGENT_MOCK` | `0` | `1` forces the deterministic mock engine even when a key exists |
-| `ADMIN_TOKEN` | — | Shared secret required by `/admin/*` endpoints (`X-Admin-Token` header) |
+| `ADMIN_PASSWORD` | — | Password required by `/admin/*` endpoints (`X-Admin-Password` header) |
 
 Every model setting can also be changed **at runtime** (no restart, takes effect
 on the next decision) via `PUT /admin/model` — see
@@ -171,8 +171,8 @@ Base: `http://localhost:8082/paymentguard/api`
 | `POST /reviews/decide` | `{"task_id":N,"action":"Approve"\|"Reject","reviewer":"RiskAnalyst"}` — complete the task; the Review Finalizer settles or blocks the payment |
 | `GET /stats` | Aggregates for the dashboard |
 | `GET /admin/model` | Effective model configuration and where each value comes from |
-| `PUT /admin/model` | Change provider/model/base_url/api_key or flip mock mode at runtime (`X-Admin-Token` required) |
-| `POST /admin/reseed` | Wipe and reseed demo data (`X-Admin-Token` required) |
+| `PUT /admin/model` | Change provider/model/base_url/api_key or flip mock mode at runtime (`X-Admin-Password` required) |
+| `POST /admin/reseed` | Wipe and reseed demo data (`X-Admin-Password` required) |
 
 Payment body:
 

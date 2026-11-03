@@ -89,13 +89,12 @@ ClassMethod APIKeySource() As %String
     Quit "none"
 }
 
-/// Shared-secret for the /admin/* endpoints (see OPERATIONS.md). Runtime
-/// override first (so a leaked token can be rotated without recreating the
-/// container), then the ADMIN_TOKEN env var.
-ClassMethod AdminToken() As %String
+/// Password for the demo admin page and the /admin/* endpoints. Configure it
+/// with the ADMIN_PASSWORD env var or ^PaymentGuardSettings("AdminPassword").
+ClassMethod AdminPassword() As %String
 {
-    Set t = ..RuntimeGet("AdminToken")
-    If t = "" Set t = ..Env("ADMIN_TOKEN")
+    Set t = ..RuntimeGet("AdminPassword")
+    If t = "" Set t = ..Env("ADMIN_PASSWORD")
     Quit t
 }
 
