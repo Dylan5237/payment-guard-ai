@@ -316,12 +316,12 @@
   header.topbar .test-area .secondary:hover { background: var(--accent-soft); border-color: var(--accent); }
   header.topbar .test-area #btn-one { box-shadow: 0 3px 12px var(--accent-line); }
 
-  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
   .stat {
     position: relative; overflow: hidden;
     background: linear-gradient(180deg, var(--stat-a) 0%, var(--stat-b) 100%);
     border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 15px 18px 14px; box-shadow: var(--panel-shadow);
+    padding: 11px 16px 10px; box-shadow: var(--panel-shadow);
   }
   .stat::before {
     content: ""; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px;
@@ -330,21 +330,37 @@
   .stat.ok::before { background: var(--ok); }
   .stat.warn::before { background: var(--warn); }
   .stat.bad::before { background: var(--bad); }
-  .stat .lbl { font-size: 10px; letter-spacing: 1.15px; color: var(--muted); text-transform: uppercase; }
-  .stat .num { font-size: 30px; line-height: 1.15; font-weight: 700; margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 9.5px; letter-spacing: 1.05px; color: var(--muted); text-transform: uppercase; }
+  .stat .num { font-size: 26px; line-height: 1.1; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
   .stat.ok .num { color: var(--ok); }
   .stat.warn .num { color: var(--warn); }
   .stat.bad .num { color: var(--bad); }
-  .stat .sub { display: block; font-size: 10.5px; color: var(--sub); margin-top: 2px; }
+  .stat .sub { display: block; font-size: 10px; color: var(--sub); margin-top: 1px; }
   .stat-strip {
     grid-column: 1 / -1; display: flex; align-items: stretch;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 9px 4px;
+    padding: 6px 4px;
   }
-  .mini { flex: 1; display: flex; align-items: baseline; gap: 10px; padding: 2px 16px; min-width: 0; }
+  .mini { flex: 1; display: flex; align-items: baseline; gap: 10px; padding: 1px 16px; min-width: 0; }
   .mini + .mini { border-left: 1px solid var(--line); }
   .mini .lbl { font-size: 10px; letter-spacing: .75px; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
-  .mini b { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+  .mini b { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+
+  .tabs { display: flex; gap: 4px; margin: 0 0 14px; border-bottom: 1px solid var(--line); }
+  .tab {
+    background: transparent; border: 0; border-bottom: 2px solid transparent; border-radius: 0;
+    box-shadow: none; color: var(--muted); padding: 9px 13px; font-size: 12px; font-weight: 600;
+    letter-spacing: .2px;
+  }
+  .tab:hover { color: var(--text); background: transparent; }
+  .tab.on { color: var(--text); border-bottom-color: var(--accent); }
+  .tab-count {
+    display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 5px;
+    border: 1px solid var(--accent-line); border-radius: 999px; background: var(--accent-soft);
+    color: var(--accent); font-size: 10px; line-height: 16px; text-align: center;
+  }
+  .tabpane { display: none; }
+  .tabpane.on { display: block; }
 
   .cols { grid-template-columns: minmax(0, 1.7fr) minmax(340px, .9fr); gap: 16px; align-items: stretch; }
   .right-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; height: 100%; }
@@ -512,6 +528,12 @@
   </div>
 </section>
 
+<div class="tabs" role="tablist" aria-label="Dashboard sections">
+  <button class="tab on" id="tab-decisions-btn" data-tab="decisions" role="tab" aria-selected="true" aria-controls="tab-decisions">Decision feed &amp; cases</button>
+  <button class="tab" id="tab-human-btn" data-tab="human" role="tab" aria-selected="false" aria-controls="tab-human">Human review <span class="tab-count" id="wf-tab-count">0</span></button>
+</div>
+
+<div id="tab-decisions" class="tabpane on" role="tabpanel" aria-labelledby="tab-decisions-btn">
 <div class="cols">
   <div class="panel">
     <h2>Decision feed <span class="panel-sub">newest first · 10 per page</span><button class="flowlink" id="flowlink" type="button">Flow replay</button></h2>
@@ -547,7 +569,22 @@
   </div>
 </div>
 
-<div class="panel" id="wfpanel" style="margin-top:14px">
+<div class="panel" id="vecpanel" style="margin-top:16px">
+  <h2>Vector-similar transactions <span class="panel-sub">IRIS Vector Search · click any decision</span>
+    <button class="secondary vec-btn" id="btn-vec-seed">seeded cataract claim</button>
+  </h2>
+  <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Similarity</th><th>Neighbor transaction</th><th>Amount</th><th>Merchant / provider</th><th>Procedure</th><th>City</th><th>Status</th></tr></thead>
+      <tbody id="vecbody"></tbody>
+    </table>
+  </div>
+  <div class="empty" id="vec-empty">Click a decision in the feed — its semantic neighbors appear here (VECTOR_COSINE top-K, similarity 1.0 = near-identical).</div>
+</div>
+</div>
+
+<div id="tab-human" class="tabpane" role="tabpanel" aria-labelledby="tab-human-btn">
+<div class="panel" id="wfpanel">
   <h2>Human review <span class="panel-sub">native IRIS Workflow Engine · every REVIEW decision opens a task</span>
     <span class="h2-right">reviewer&nbsp;
       <input id="wf-reviewer" value="RiskAnalyst" spellcheck="false">
@@ -562,18 +599,6 @@
   <div class="empty" id="wf-empty">No open human-review tasks — a REVIEW decision will queue one here (role: PaymentGuard Human Review).</div>
   <div class="pager" id="wf-pager"></div>
 </div>
-
-<div class="panel" id="vecpanel" style="margin-top:14px">
-  <h2>Vector-similar transactions <span class="panel-sub">IRIS Vector Search · click any decision</span>
-    <button class="secondary vec-btn" id="btn-vec-seed">seeded cataract claim</button>
-  </h2>
-  <div style="overflow-x:auto">
-    <table>
-      <thead><tr><th>Similarity</th><th>Neighbor transaction</th><th>Amount</th><th>Merchant / provider</th><th>Procedure</th><th>City</th><th>Status</th></tr></thead>
-      <tbody id="vecbody"></tbody>
-    </table>
-  </div>
-  <div class="empty" id="vec-empty">Click a decision in the feed — its semantic neighbors appear here (VECTOR_COSINE top-K, similarity 1.0 = near-identical).</div>
 </div>
 
 <footer>
@@ -840,6 +865,8 @@ async function refreshReviews() {
             <button class="wf-act" data-act="Reject" style="background:var(--bad)">Reject</button></td>
       </tr>`).join("");
     $("wfbody").innerHTML = rows;
+    const cnt = $("wf-tab-count");
+    if (cnt) { cnt.textContent = r.total ?? 0; cnt.style.display = (r.total ? "" : "none"); }
     $("wf-empty").style.display = rows ? "none" : "block";
     const pages = Math.max(1, r.pages || 1);
     if (!rows && reviewsPage > pages) { reviewsPage = pages; return refreshReviews(); }
@@ -1523,6 +1550,15 @@ $("wfbody").addEventListener("click", async e => {
     tr.querySelectorAll("button.wf-act").forEach(x => { x.disabled = false; x.style.opacity = 1; });
   } finally { busy(false); }
 });
+
+document.querySelectorAll(".tabs .tab").forEach(t => t.addEventListener("click", () => {
+  document.querySelectorAll(".tabs .tab").forEach(x => {
+    const on = x === t;
+    x.classList.toggle("on", on);
+    x.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  document.querySelectorAll(".tabpane").forEach(p => p.classList.toggle("on", p.id === "tab-" + t.dataset.tab));
+}));
 
 refreshAll();
 setInterval(() => { if (!document.hidden) refreshAll(); }, 6000);
