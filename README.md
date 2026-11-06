@@ -22,7 +22,22 @@ A 4:47 walkthrough: instant rule decisions with zero LLM cost, the gray zone goi
 
 - **One command, fully containerized** — `docker compose up -d --build` starts IRIS (AI Hub EAP community image) plus the Web Gateway sidecar (see Quick start).
 - **Online demo** — [http://43.139.159.100:8082/paymentguard/](http://43.139.159.100:8082/paymentguard/): the live dashboard, the REST API at `/paymentguard/api` and the production behind it, deciding in live DeepSeek mode. Management Portal: http://43.139.159.100:8082/csp/sys/UtilHome.csp (`SuperUser` / `SYS`).
-- **IPM package** — module `paymentguard`: `zpm "install paymentguard"` from the InterSystems package registry (or `zpm "load /path/to/payment-guard-ai"` from the clone) installs classes, REST web apps and the dashboard.
+- **IPM package** — module `paymentguard`. The AI Hub EAP image ships without the IPM client, so install it first in `%SYS`, then enable the community registry in your application namespace:
+
+  ```objectscript
+  // %SYS: install the IPM client (same one-liner as iris.script)
+  Set r = ##class(%Net.HttpRequest).%New()
+  Set r.Server = "pm.community.intersystems.com"
+  Set r.SSLConfiguration = "ISC.FeatureTracker.SSL.Config"
+  Do r.Get("/packages/zpm/latest/installer")
+  Do $system.OBJ.LoadStream(r.HttpResponse.Data, "c")
+
+  // application namespace: enable the community registry and install
+  zpm "enable -community"
+  zpm "install paymentguard"
+  ```
+
+  On a stock IRIS instance where IPM is already available, only the last two lines are needed. The package installs the classes, REST web apps and the dashboard into the IRIS CSP directory. The NoPWS AI Hub image still needs the Web Gateway sidecar from this repository for HTTP (`docker compose up -d --build` starts it); the sidecar also needs the IRIS-side setup from Quick start — the `CSPSystem` user, `%Service_WebGateway` and the UnknownUser roles — which the Docker path performs automatically. For an IPM-only install the dashboard is at `http://<gateway>/csp/paymentguard/index.html`.
 - **Embedded Python inside** — two Python-native components in the decision path: the offline-trained logistic risk prior (`ml_model` in the risk context) and the transaction feature hasher behind vector similarity (see below). Both are `[Language = python]` methods, pure standard library, no pip packages.
 - **No API key? Mock mode** — the stack runs end-to-end offline: a deterministic engine answers in the same JSON contract, and the whole %UnitTest suite (33 tests) is green without any key.
 - **Operations guide** — [OPERATIONS.md](OPERATIONS.md): configuration (including swapping the model at runtime), health checks, failure playbook and security notes for reusing the stack beyond the demo.

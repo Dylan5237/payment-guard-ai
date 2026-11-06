@@ -3,13 +3,13 @@
   <Document name="paymentguard.ZPM">
     <Module>
       <Name>paymentguard</Name>
-      <Version>0.4.0</Version>
+      <Version>0.5.0</Version>
       <Description>PaymentGuard AI - AI Hub agent decisioning inside an IRIS interoperability production</Description>
       <Packaging>module</Packaging>
       <SourcesRoot>src</SourcesRoot>
       <Resource Name="PaymentGuard.PKG"/>
       <Resource Name="%ZSTART.MAC"/>
-      <FileCopy Name="web/" Target="${mgr}csp/paymentguard/" Overwrite="1"/>
+      <FileCopy Name="web/" Target="${cspdir}/paymentguard/" Overwrite="1"/>
       <WebApplication
         Url="/paymentguard/api"
         DispatchClass="PaymentGuard.REST.Dispatch"
@@ -22,6 +22,7 @@
       />
       <WebApplication
         Url="/csp/paymentguard"
+        Path="${cspdir}/paymentguard/"
         ServeFiles="1"
         MatchRoles=":{$globalsDbRole}"
         PasswordAuthEnabled="0"
