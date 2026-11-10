@@ -58,6 +58,9 @@
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font: 14px/1.5 "Segoe UI", system-ui, sans-serif; padding: 20px; }
+  .vote-banner { display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; padding: 8px 14px; margin-bottom: 14px; border: 1px solid var(--accent-line); background: var(--accent-soft); border-radius: 10px; font-size: 12.5px; text-align: center; }
+  .vote-banner a { color: var(--accent); font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .vote-banner a:hover { text-decoration: underline; }
   header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
   h1 { font-size: 20px; font-weight: 600; letter-spacing: .3px; }
   .pill { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid var(--line); color: var(--muted); }
@@ -470,6 +473,7 @@
 </style>
 </head>
 <body>
+<div class="vote-banner">🏆 InterSystems AI Agents contest — voting is open through Nov 15, 2026. <a href="https://openexchange.intersystems.com/contest/49" target="_blank" rel="noopener">Vote for PaymentGuard AI →</a></div>
 <header class="topbar">
   <div class="brand">
     <h1><img id="brand-logo" src="logo.png" alt="PaymentGuard AI" style="height:30px;width:auto;margin-right:4px;vertical-align:-0.15em"> PaymentGuard <span style="color:var(--ai)">AI</span></h1>

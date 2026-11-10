@@ -12,6 +12,8 @@ Every decision — rules, agent, mock or fallback — lands in an immutable audi
 
 Built for the **InterSystems Programming Contest: AI Agent in Interoperability Workflows** (Oct–Nov 2026).
 
+> 🏆 **Voting is open through November 15, 2026.** If PaymentGuard AI looks useful to you, please [vote for it on Open Exchange](https://openexchange.intersystems.com/contest/49) — find **PaymentGuard AI** in the list and click **Vote**. Thank you!
+
 ## Demo
 
 [![Watch the demo — PaymentGuard AI](https://img.youtube.com/vi/gk_4e_GpJN0/maxresdefault.jpg)](https://youtu.be/gk_4e_GpJN0)
