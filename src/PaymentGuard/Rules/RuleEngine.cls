@@ -20,6 +20,9 @@ Parameter CLAIMDUPLICATEHOURS = 168;
 /// Segment hard caps in USD
 Parameter CAPRETAIL = 5000;
 
+/// Fast-approve amount cap for learned device trust (USD)
+Parameter LEARNEDCAP = 250;
+
 Parameter CAPSME = 50000;
 
 Parameter CAPVIP = 100000;
@@ -84,6 +87,17 @@ ClassMethod Evaluate(pReq As PaymentGuard.Request.Payment, pCtx As %DynamicObjec
        dev.%Get("known") = 1,
        dev.%Get("customer_count") <= 1 {
         Set pRule = "LOW_RISK_FAST_PATH", pReason = "Trusted customer, small amount, home country, known personal device"
+        Quit "APPROVE"
+    }
+
+    // ── Learned fast approve: human-confirmed (customer, device) pair ──
+    // PaymentGuard.Learned.Store: an analyst approving a gray-zone payment
+    // trusts that device for that customer for a bounded time. Every hard
+    // rule above already ran, so learned trust can never bypass them.
+    If pReq.DeviceId '= "", pReq.Amount <= ..#LEARNEDCAP,
+       ##class(PaymentGuard.Learned.Store).Trusted(pReq.CustomerId, pReq.DeviceId) {
+        Do ##class(PaymentGuard.Learned.Store).Touch(pReq.CustomerId, pReq.DeviceId)
+        Set pRule = "LEARNED_DEVICE_FAST_PATH", pReason = "Device "_pReq.DeviceId_" trusted for customer "_pReq.CustomerId_" by an approved human review (learned rule)"
         Quit "APPROVE"
     }
 

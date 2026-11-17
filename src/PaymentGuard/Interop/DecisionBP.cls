@@ -134,6 +134,13 @@ Method OnRequest(pRequest As PaymentGuard.Request.Payment, Output pResponse As P
         }
     }
 
+    // ── 4b. Learning layer: a BLOCK demotes learned trust ────
+    If (action = "BLOCK") && (pRequest.DeviceId '= "") {
+        If ##class(PaymentGuard.Learned.Store).Demote(pRequest.CustomerId, pRequest.DeviceId) {
+            Do ##class(Ens.Util.Log).LogInfo($classname(),"OnRequest","Demoted learned device trust customer="_pRequest.CustomerId_" device="_pRequest.DeviceId_" after BLOCK txn="_txnId)
+        }
+    }
+
     // ── 5. Route the outcome ──────────────────────────────────
     Set msg = ##class(PaymentGuard.Msg.DecisionMade).%New()
     Set msg.TxnId = txnId

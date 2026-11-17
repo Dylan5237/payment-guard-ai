@@ -66,6 +66,25 @@ Method OnRequest(pRequest As PaymentGuard.Request.ReviewFinalization, Output pRe
         Do ##class(Ens.Util.Log).LogWarning($classname(),"OnRequest","Transaction "_txnId_" no longer exists (reseeded?) - audit record only")
     }
 
+    // ── Learning layer: the approved pair becomes a rule ─────
+    // An analyst approving a gray-zone payment writes learned device trust:
+    // the next payment of this customer on this device is decided by
+    // LEARNED_DEVICE_FAST_PATH with zero LLM calls. A reject demotes the
+    // pair. The backtest gate inside Learn() refuses to contradict any past
+    // BLOCK of the same pair.
+    If (pRequest.CustomerId '= "") && $IsObject(txn) && (txn.DeviceId '= "") {
+        If finalAction = "APPROVE" {
+            Set learned = ##class(PaymentGuard.Learned.Store).Learn(pRequest.CustomerId, txn.DeviceId, reviewer)
+            If learned.%Get("learned") {
+                Do ##class(Ens.Util.Log).LogInfo($classname(),"OnRequest","Learned device trust customer="_pRequest.CustomerId_" device="_txn.DeviceId_" by="_reviewer_" txn="_txnId)
+            } Else {
+                Do ##class(Ens.Util.Log).LogInfo($classname(),"OnRequest","Learn skipped customer="_pRequest.CustomerId_" device="_txn.DeviceId_": "_learned.%Get("reason"))
+            }
+        } ElseIf ##class(PaymentGuard.Learned.Store).Demote(pRequest.CustomerId, txn.DeviceId) {
+            Do ##class(Ens.Util.Log).LogInfo($classname(),"OnRequest","Demoted learned device trust customer="_pRequest.CustomerId_" device="_txn.DeviceId_" after reject txn="_txnId)
+        }
+    }
+
     // ── Resolve the review case ─────────────────────────────
     Set tStmt = ##class(%SQL.Statement).%New()
     Set tSC = tStmt.%Prepare("SELECT ID FROM PaymentGuard_Data.CaseRecord WHERE TxnId = ? AND Type = 'REVIEW' AND Status = 'OPEN'")

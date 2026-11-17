@@ -7,8 +7,11 @@ Class PaymentGuard.Tests.Suite
 
 ClassMethod RunAll() As %Status
 {
-    // /noload mode takes comma-separated, fully-qualified test class names
-    Quit ##class(%UnitTest.Manager).RunTest("PaymentGuard.Tests.TestRules,PaymentGuard.Tests.TestJSON,PaymentGuard.Tests.TestPyModel,PaymentGuard.Tests.TestMockFlow,PaymentGuard.Tests.TestClaims,PaymentGuard.Tests.TestWorkflow", "/noload/nodebug")
+    // Package form: the manager imports ^UnitTestRoot/PaymentGuard/Tests/*.cls
+    // and runs every %TestCase class. Fully-qualified class names with /noload
+    // resolve each name as a directory and fail on this EAP build.
+    Set ^UnitTestRoot = "/home/irisowner/dev/src"
+    Quit ##class(%UnitTest.Manager).RunTest("PaymentGuard.Tests", "/nodebug")
 }
 
 }

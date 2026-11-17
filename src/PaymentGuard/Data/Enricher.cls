@@ -18,6 +18,7 @@ ClassMethod BuildContext(pReq As PaymentGuard.Request.Payment, pCust As PaymentG
     Do ctx.%Set("velocity_24h", ..Velocity(pReq.CustomerId, 24))
     Do ctx.%Set("recent_transactions", ..RecentTransactions(pReq.CustomerId, 3))
     Do ctx.%Set("device", ..DeviceHistory(pReq.DeviceId))
+    Do ctx.%Set("learned_device", ##class(PaymentGuard.Learned.Store).Info(pReq.CustomerId, pReq.DeviceId))
     Do ctx.%Set("merchant", ..MerchantProfile(pReq.Merchant))
     Do ctx.%Set("similar_transactions", ##class(PaymentGuard.Vector.Embedder).Search(##class(PaymentGuard.Vector.Embedder).RequestFeatures(pReq), 3, 0.35, pTxnId))
     Quit ctx

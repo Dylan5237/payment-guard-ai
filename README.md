@@ -6,6 +6,7 @@ PaymentGuard AI is a payment-authorization workflow built with the IRIS 2026.3 *
 
 - **Deterministic rules first** — sanctions, blacklists, hard limits and velocity spikes are blocked instantly, and fully-trusted payments are approved instantly, with zero LLM cost.
 - **The gray zone goes to an AI Hub agent** — a real `%AI.Agent` ("AI Risk Agent") with read-only **SQL tools** over the payment platform's own data. It grounds its APPROVE / REVIEW / BLOCK decision in live customer history, velocity, device reputation and merchant statistics.
+- **Approved reviews become rules** — when an analyst approves a gray-zone payment, that (customer, device) pair is learned: the next payment on it is decided by the rule engine with zero LLM calls (see [Learning layer](#learning-layer--approved-reviews-become-rules)).
 - **Fail-safe by design** — if the agent errors, times out or returns malformed output, the payment degrades to a human-review queue, never to a silent approve and never to a blind block.
 
 Every decision — rules, agent, mock or fallback — lands in an immutable audit record with **full cost observability**: prompt/completion tokens, tool-call count, latency, model and the persisted AI Hub session id (replayable via `%AI.Agent.Session`).
@@ -71,7 +72,7 @@ Two further items close the loop around the gray zone: **"PaymentGuard Human Rev
 
 1. **Persist** the payment attempt (`PENDING`)
 2. **Enrich** — customer, 1h/24h velocity, last 3 transactions, device reputation, merchant 30-day stats, top-3 vector-similar historical transactions
-3. **Rules** — blacklist, failed KYC, sanctioned geo, segment caps, velocity spike → `BLOCK`; trusted + small + home + known device → `APPROVE` fast path. Everything in between is the gray zone
+3. **Rules** — blacklist, failed KYC, sanctioned geo, segment caps, velocity spike → `BLOCK`; trusted + small + home + known device → `APPROVE` fast path; a human-confirmed device pair → `APPROVE` learned fast path (see [Learning layer](#learning-layer--approved-reviews-become-rules)). Everything else is the gray zone
 4. **Agent** — gray-zone payments are sent (as `PaymentGuard.Request.AgentDecision`) to the AI Risk Agent operation; the agent may call its tools, then must answer with JSON; the answer is parsed defensively (`Util.JSON.ExtractObject`) and validated (`Util.Validator.ValidDecision`)
 5. **Route** — `APPROVE` → Settlement, `REVIEW` → human review queue (case record) **+ a native Workflow Engine task** for the review role, `BLOCK` → fraud alert. When the analyst completes the task, the Review Finalizer process routes the final call (settle or alert), appends the `HUMAN` audit record and resolves the case
 6. **Audit** — decision record with reasons, model, session id, tokens, latency; transaction status updated
@@ -262,6 +263,34 @@ curl -s -X POST localhost:8082/paymentguard/api/reviews/decide -H "Content-Type:
   -d '{"task_id":1,"action":"Approve","reviewer":"RiskAnalyst"}'
 ```
 
+## Learning layer — approved reviews become rules
+
+When an analyst **approves** a gray-zone payment, the (customer, device) pair
+behind it is learned: the next payment of the same customer on the same device
+is decided by the rule engine — `LEARNED_DEVICE_FAST_PATH`, `source: "RULES"`,
+zero LLM calls, zero tokens — instead of going back to the agent. A **reject**
+demotes the pair instantly, and so does any later `BLOCK`.
+
+The learned store (`PaymentGuard.Learned.Store`, global `^PaymentGuardLearned`)
+is deliberately narrow:
+
+- **Scoped** to one (customer, device) pair — never a global generalization
+- **Bounded** — entries expire after 30 days and only cover payments ≤ $250
+  (`LEARNEDCAP`); above the cap the pair stays gray zone
+- **Never overrides a hard rule** — learned trust sits *after* every hard
+  block (sanctions, blacklists, caps, velocity, duplicate claims), so nothing
+  can be learned away
+- **Backtest gate** — `Learn()` refuses to write when the pair has any
+  `BLOCKED` history: a learned rule must never contradict a past decision
+- **Survives reseed** — learned entries live in their own global, so the demo
+  reset (which reloads seed data) does not erase what the analysts taught the
+  system; `PaymentGuard.Learned.Store.Clear()` wipes them explicitly
+
+The agent's context also carries an advisory `learned_device` signal
+(`PaymentGuard.Data.Enricher`), so a payment that *does* reach the gray zone
+still tells the agent whether this pair is trusted. The full loop — approve,
+learn, re-decide, demote — is covered by `PaymentGuard.Tests.TestLearned`.
+
 ## Healthcare claims scenario
 
 The same production also decides **health-insurance claim settlements**. A claim
@@ -412,10 +441,11 @@ end-to-end production run in mock mode (blocked, fast-approved, gray-zone, fraud
 and audit-trail cases), the healthcare claims scenario (endpoint mapping, the
 duplicate cross-city rule, the provider blacklist and the agent-correlated claim
 flow), the vector search layer (embedding determinism, seeded-claim retrieval,
-context injection, self-exclusion, end-to-end embedding), and the human-review
+context injection, self-exclusion, end-to-end embedding), the human-review
 workflow (task creation for REVIEW decisions, claim + complete, approve→settlement
-and reject→block finalization with audit and case resolution) — it runs offline,
-no API key needed.
+and reject→block finalization with audit and case resolution), and the learning
+layer (learn + backtest gate, learned fast path, hard-rule precedence, amount
+cap, expiry and demote) — it runs offline, no API key needed.
 
 ## Project structure
 
@@ -428,6 +458,7 @@ no API key needed.
 │   ├── Interop/     Production, DecisionBP, AgentOperation, Settle/Review/Alert BOs
 │   ├── REST/        Dispatch (%CSP.REST), BS (EnsLib.REST.Service)
 │   ├── Rules/       RuleEngine, Mocker (deterministic offline engine)
+│   ├── Learned/     Store — learned device trust (approved reviews become rules)
 │   ├── Vector/      Embedder — Embedded Python feature hasher + cosine search
 │   ├── Data/        Customer, Transaction, Decision, CaseRecord, Enricher, Populate
 │   ├── Request/ Response/ Msg/    interoperability messages
