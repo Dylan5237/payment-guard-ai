@@ -83,6 +83,12 @@ curl -X POST http://localhost:8082/paymentguard/api/admin/reseed \
   -H "X-Admin-Password: $ADMIN_PASSWORD"
 ```
 
+A reseed deliberately **keeps learned device trust** (`^PaymentGuardLearned`) —
+analysts' approvals are knowledge, not demo data. The transactions behind those
+entries are reseeded, so the learn-time backtest gate (no BLOCKED history for
+the pair) refers to the *new* seed. To wipe learned entries explicitly:
+`do ##class(PaymentGuard.Learned.Store).Clear()`.
+
 **Logs**: `docker compose logs iris` (interoperability + `messages.log`),
 `docker compose logs webgateway` (Apache/CSP). Per-decision reasoning lives in
 the database, not logs: every decision carries the persisted AI Hub session id
