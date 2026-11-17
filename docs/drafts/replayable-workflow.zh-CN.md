@@ -309,4 +309,3 @@ Set tSC = t.%Save()
 
 在线上演示里试回放：[43.139.159.100:8082/paymentguard](http://43.139.159.100:8082/paymentguard/)　源码：[github.com/Dylan5237/payment-guard-ai](https://github.com/Dylan5237/payment-guard-ai)
 
-如果这个思路对你有用，欢迎在 [Open Exchange 上给 PaymentGuard AI 投一票](https://openexchange.intersystems.com/contest/49)——在列表里找到 **PaymentGuard AI** 点 Vote 即可。谢谢。

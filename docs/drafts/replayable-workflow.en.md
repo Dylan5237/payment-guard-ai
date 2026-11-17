@@ -305,4 +305,3 @@ An agent that moves money should be able to show its work. In IRIS, most of the 
 
 Try the replay on the live demo: [43.139.159.100:8082/paymentguard](http://43.139.159.100:8082/paymentguard/) · Source: [github.com/Dylan5237/payment-guard-ai](https://github.com/Dylan5237/payment-guard-ai)
 
-If this approach is useful to you, [vote for PaymentGuard AI on Open Exchange](https://openexchange.intersystems.com/contest/49) — find **PaymentGuard AI** in the list and click **Vote**. Thank you.
